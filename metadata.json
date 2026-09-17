@@ -1,0 +1,6 @@
+{
+  "name": "Gestión de Entregables y Certificaciones",
+  "description": "Control de entregables de ingeniería, hitos, certificados de cobro, curva S y distribución de gastos con soporte de sincronización JSON.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
