@@ -93,6 +93,7 @@ export async function exportElementToPng(
       quality: 0.98,
       pixelRatio: scale,
       backgroundColor: bg,
+      skipFonts: true,
       filter: (node: any) => {
         if (node?.id && hideIds.includes(node.id)) {
           return false;
@@ -111,6 +112,7 @@ export async function exportElementToPng(
       quality: 0.98,
       pixelRatio: scale,
       backgroundColor: bg,
+      skipFonts: true,
       filter: (node: any) => {
         if (node?.id && hideIds.includes(node.id)) {
           return false;

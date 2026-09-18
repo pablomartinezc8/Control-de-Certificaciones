@@ -96,52 +96,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (!dashboardCardRef.current) return;
     setDownloadingReport(true);
     try {
-      const canvas = await html2canvas(dashboardCardRef.current, {
-        scale: 2,
-        backgroundColor: '#F8FAFC',
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        onclone: (clonedDoc) => {
-          const ctrls = clonedDoc.getElementById('dashboard-header-actions');
-          if (ctrls) ctrls.style.display = 'none';
-
-          const svgs = clonedDoc.querySelectorAll('svg');
-          svgs.forEach((svg) => {
-            const width = svg.clientWidth || svg.getBoundingClientRect().width;
-            const height = svg.clientHeight || svg.getBoundingClientRect().height;
-            if (width > 0) svg.setAttribute('width', `${width}`);
-            if (height > 0) svg.setAttribute('height', `${height}`);
-          });
-        },
-      });
-
       const projectNameClean = (proyecto.nombre || 'proyecto').replace(/[^a-zA-Z0-9_-]/g, '_');
       const fileName = `caratula_dashboard_${projectNameClean}_${selectedCutoffDate}.png`;
 
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          const pngUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.href = pngUrl;
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          return;
-        }
-
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(blobUrl);
-        }, 500);
-      }, 'image/png');
+      await exportElementToPng(dashboardCardRef.current, fileName, {
+        backgroundColor: '#F8FAFC',
+        hideElementIds: ['dashboard-header-actions'],
+        scale: 2,
+      });
     } catch (err) {
       console.error('Error generando reporte:', err);
       alert('No se pudo generar la imagen de la carátula.');

@@ -197,7 +197,6 @@ export function computeProjectMetrics(
   let cantidadCHO = 0;
   let totalCertificado = 0;
   let totalCobrado = 0;
-  let cantidadCertificados = 0;
 
   // Count deliverable certification status
   let totalmenteCertificados = 0;
@@ -218,14 +217,19 @@ export function computeProjectMetrics(
     e.hitos.forEach((h) => {
       h.certificados.forEach((c) => {
         const importe = Number(c.importe) || 0;
-        const fCert = normalizeDate(c.fechaPresentacion) || normalizeDate(c.fechaAprobacion) || '';
-        const fCobro = normalizeDate(c.fechaCobro) || fCert;
+        const rawPres = normalizeDate(c.fechaPresentacion);
+        const rawAprob = normalizeDate(c.fechaAprobacion);
+        const rawCobro = normalizeDate(c.fechaCobro);
+
+        // La fecha de emisión/certificación efectiva no puede ser posterior a su fecha de cobro o aprobación
+        const allDates = [rawPres, rawAprob, rawCobro].filter(Boolean) as string[];
+        const fCert = allDates.length > 0 ? [...allDates].sort()[0] : (rawPres || rawAprob || '');
+        const fCobro = rawCobro || fCert;
 
         // Si hay fecha de corte seleccionada, filtrar certificados posteriores
         if (!fechaCorteSeleccionada || fCert <= fechaCorteSeleccionada) {
           totalCertificado += importe;
           certsOnEntregable += importe;
-          cantidadCertificados++;
         }
 
         if (c.estado === 'Cobrado' && (!fechaCorteSeleccionada || fCobro <= fechaCorteSeleccionada)) {
@@ -278,6 +282,19 @@ export function computeProjectMetrics(
   const certificadoTaging = totalCertificado;
   const saldoPendienteTaging = Math.max(0, valorTotalTaging - certificadoTaging);
   const porcentajeCertificadoTaging = valorTotalTaging > 0 ? (certificadoTaging / valorTotalTaging) * 100 : 0;
+
+  // Invariante de coherencia: lo cobrado nunca puede ser superior a lo certificado
+  totalCobrado = Math.min(totalCobrado, totalCertificado);
+
+  // Conteo preciso de certificados agrupados/documentos reales
+  const groupedCerts = getGroupedCertificates(proyecto);
+  const cantidadCertificados = fechaCorteSeleccionada
+    ? groupedCerts.filter((d) => {
+        const dDates = [normalizeDate(d.fechaPresentacion), normalizeDate(d.fechaAprobacion), normalizeDate(d.fechaCobro)].filter(Boolean) as string[];
+        const dMin = dDates.length > 0 ? dDates.sort()[0] : '';
+        return !dMin || dMin <= fechaCorteSeleccionada;
+      }).length
+    : groupedCerts.length;
 
   const totalPendienteCobro = Math.max(0, totalCertificado - totalCobrado);
   const saldoPorCertificar = Math.max(0, totalContratado - totalCertificado);
@@ -406,8 +423,14 @@ export function computeCurvaS(
     e.hitos.forEach((h) => {
       h.certificados.forEach((c) => {
         const importe = Number(c.importe) || 0;
-        const fechaCert = normalizeDate(c.fechaPresentacion) || normalizeDate(c.fechaAprobacion);
-        const fechaCobro = normalizeDate(c.fechaCobro) || fechaCert;
+        const rawPres = normalizeDate(c.fechaPresentacion);
+        const rawAprob = normalizeDate(c.fechaAprobacion);
+        const rawCobro = normalizeDate(c.fechaCobro);
+
+        // La fecha de certificación efectiva no puede ser posterior a su aprobación o cobro
+        const allDates = [rawPres, rawAprob, rawCobro].filter(Boolean) as string[];
+        const fechaCert = allDates.length > 0 ? [...allDates].sort()[0] : (rawPres || rawAprob || '');
+        const fechaCobro = rawCobro || fechaCert;
         certItems.push({
           fechaCert,
           fechaCobro,
@@ -456,6 +479,11 @@ export function computeCurvaS(
 
       certAcum += certSlice;
       cobradoAcum += cobradoSlice;
+
+      // Invariante de coherencia financiera: lo cobrado nunca puede superar lo certificado
+      if (cobradoAcum > certAcum) {
+        cobradoAcum = certAcum;
+      }
 
       const pctCert = totalProyectoValor > 0 ? (certAcum / totalProyectoValor) * 100 : 0;
       const pctCobrado = totalProyectoValor > 0 ? (cobradoAcum / totalProyectoValor) * 100 : 0;
@@ -644,12 +672,14 @@ export interface CertificadoDocumento {
   importeTotal: number;
   estado: string;
   tipo: string;
+  observaciones?: string;
   actividades: {
     codigo: string;
     descripcion: string;
     hitoNombre: string;
     hitoPorcentaje: number;
     valorHito: number;
+    importe: number;
     cobrado: number;
     pendiente: number;
     entregableId: string;
@@ -673,6 +703,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
     importeTotal: number;
     estado: string;
     tipo: string;
+    observaciones: string;
     actividades: CertificadoDocumento['actividades'];
   }>();
 
@@ -696,6 +727,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
         importeTotal: 0,
         estado: certificado.estado,
         tipo: certAny.tipo || 'normal',
+        observaciones: certificado.observaciones || '',
         actividades: [],
       });
     }
@@ -708,6 +740,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
       hitoNombre: hito.nombre,
       hitoPorcentaje: hito.porcentaje,
       valorHito,
+      importe,
       cobrado: isCobrado ? importe : 0,
       pendiente: isCobrado ? 0 : importe,
       entregableId: entregable.id,
@@ -740,6 +773,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
       importeTotal: Math.round(doc.importeTotal * 100) / 100,
       estado: doc.estado,
       tipo: doc.tipo,
+      observaciones: doc.observaciones,
       actividades: doc.actividades,
     };
   });

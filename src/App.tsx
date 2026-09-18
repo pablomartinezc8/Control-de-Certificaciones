@@ -629,16 +629,28 @@ export default function App() {
   const handleSaveDocumento = (
     docKey: string,
     baseCertificado: Omit<Certificado, 'id' | 'importe'>,
-    actividades: { entregableId: string; hitoId: string; importe: number; seleccionado: boolean }[]
+    actividades: { entregableId: string; hitoId: string; importe: number; seleccionado: boolean; certId?: string }[]
   ) => {
+    const finalBaseCert: Omit<Certificado, 'id' | 'importe'> = {
+      ...baseCertificado,
+      fechaCobro:
+        baseCertificado.estado === 'Cobrado' && !baseCertificado.fechaCobro
+          ? baseCertificado.fechaPresentacion || new Date().toISOString().split('T')[0]
+          : baseCertificado.fechaCobro,
+    };
+
     updateAppData((prev) => ({
       ...prev,
       proyectos: prev.proyectos.map((proj) => {
         if (proj.id !== currentProject.id) return proj;
 
-        const actMap = new Map<string, { importe: number; seleccionado: boolean }>();
+        const actMap = new Map<string, { importe: number; seleccionado: boolean; certId?: string }>();
         actividades.forEach((a) =>
-          actMap.set(`${a.entregableId}__${a.hitoId}`, { importe: a.importe, seleccionado: a.seleccionado })
+          actMap.set(`${a.entregableId}__${a.hitoId}`, {
+            importe: a.importe,
+            seleccionado: a.seleccionado,
+            certId: a.certId,
+          })
         );
 
         const updatedEntregables = proj.entregables.map((ent) => {
@@ -649,6 +661,7 @@ export default function App() {
 
             const hasExistingInDoc = h.certificados.some(
               (c) =>
+                (actConfig?.certId && c.id === actConfig.certId) ||
                 c.grupo === docKey ||
                 c.id === docKey ||
                 `${c.nombre}_${c.fechaCobro || c.fechaPresentacion}` === docKey
@@ -661,9 +674,12 @@ export default function App() {
                   ...h,
                   certificados: h.certificados.filter(
                     (c) =>
-                      c.grupo !== docKey &&
-                      c.id !== docKey &&
-                      `${c.nombre}_${c.fechaCobro || c.fechaPresentacion}` !== docKey
+                      !(
+                        (actConfig?.certId && c.id === actConfig.certId) ||
+                        c.grupo === docKey ||
+                        c.id === docKey ||
+                        `${c.nombre}_${c.fechaCobro || c.fechaPresentacion}` === docKey
+                      )
                   ),
                 };
               } else {
@@ -671,13 +687,15 @@ export default function App() {
                   ...h,
                   certificados: h.certificados.map((c) => {
                     if (
+                      (actConfig?.certId && c.id === actConfig.certId) ||
                       c.grupo === docKey ||
                       c.id === docKey ||
                       `${c.nombre}_${c.fechaCobro || c.fechaPresentacion}` === docKey
                     ) {
                       return {
                         ...c,
-                        ...baseCertificado,
+                        ...finalBaseCert,
+                        grupo: c.grupo || docKey,
                         importe: actConfig.importe,
                       };
                     }
@@ -688,7 +706,7 @@ export default function App() {
             } else if (actConfig && actConfig.seleccionado && actConfig.importe > 0) {
               hasChanges = true;
               const newCert: Certificado = {
-                ...baseCertificado,
+                ...finalBaseCert,
                 id: `cert_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
                 grupo: docKey,
                 importe: actConfig.importe,

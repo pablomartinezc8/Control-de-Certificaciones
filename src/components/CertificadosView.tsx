@@ -457,7 +457,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                                           {formatCurrency(act.valorHito)}
                                         </td>
                                         <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
-                                          {formatCurrency(act.cobrado || act.pendiente)}
+                                          {formatCurrency(act.importe ?? (act.cobrado || act.pendiente))}
                                         </td>
                                       </tr>
                                     ))}
