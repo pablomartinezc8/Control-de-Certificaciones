@@ -11,16 +11,31 @@ export function isSandboxedIframe(): boolean {
 }
 
 /**
+ * Obtiene todos los estilos CSS y enlaces de estilos del documento actual
+ * para inyectarlos en la ventana o iframe de impresión.
+ */
+function getDocumentStyles(): string {
+  try {
+    const styleElements = Array.from(
+      document.querySelectorAll('style, link[rel="stylesheet"]')
+    );
+    return styleElements.map((el) => el.outerHTML).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Imprime el reporte de forma totalmente aislada a través de un iframe invisible.
- * Esto garantiza que:
- * 1. NUNCA salga la página web o el dashboard de fondo (fondo 100% blanco puro).
- * 2. El reporte ocupe el ancho completo de la hoja A4 / Carta sin recortes.
- * 3. Todas las hojas tengan el pie de página oficial ("Documento confidencial...").
- * 4. Las tablas que no entren completas en la hoja salten íntegras abajo sin cortarse a la mitad.
+ * Garantiza:
+ * 1. Fondo 100% blanco puro (sin elementos de la web de fondo).
+ * 2. Formato ajustado para 1 SOLA HOJA A4 cuando el contenido es ejecutivo.
+ * 3. Logotipos SVG con dimensiones fijas estrictas (no se expanden).
+ * 4. Pie de página institucional en cada hoja.
  */
 export function printReportIsolated(printableHtml: string, title: string): boolean {
   try {
-    // Eliminar cualquier iframe de impresión previo si quedó en el DOM
+    // Eliminar cualquier iframe previo
     const oldIframe = document.getElementById('taging-print-isolated-iframe');
     if (oldIframe) {
       oldIframe.remove();
@@ -46,6 +61,8 @@ export function printReportIsolated(printableHtml: string, title: string): boole
       return false;
     }
 
+    const parentStyles = getDocumentStyles();
+
     iframeDoc.open();
     iframeDoc.write(`
       <!DOCTYPE html>
@@ -53,10 +70,11 @@ export function printReportIsolated(printableHtml: string, title: string): boole
       <head>
         <meta charset="UTF-8">
         <title>${title}</title>
+        ${parentStyles}
         <style>
           @page {
             size: A4 portrait;
-            margin: 10mm 12mm 14mm 12mm;
+            margin: 8mm 10mm 10mm 10mm;
           }
 
           * {
@@ -69,32 +87,41 @@ export function printReportIsolated(printableHtml: string, title: string): boole
           html, body {
             margin: 0 !important;
             padding: 0 !important;
+            background: #ffffff !important;
             background-color: #ffffff !important;
             color: #0f172a !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            font-size: 11px;
-            line-height: 1.4;
+            font-size: 10px;
+            line-height: 1.35;
             width: 100% !important;
           }
 
-          /* Contenedor principal a ancho completo */
+          /* Control estricto de SVG para evitar que se expandan */
+          svg {
+            display: inline-block;
+            vertical-align: middle;
+            max-width: 36px !important;
+            max-height: 36px !important;
+          }
+
           .report-root {
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 auto;
             background: #ffffff !important;
+            padding: 0 !important;
           }
 
-          /* Pie de página repetido en CADA hoja impresa */
+          /* Pie de página repetido en cada hoja */
           .print-footer-fixed {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
-            height: 22px;
+            height: 20px;
             border-top: 1px solid #cbd5e1;
-            padding-top: 4px;
-            font-size: 8.5px;
+            padding-top: 3px;
+            font-size: 8px;
             color: #64748b;
             display: flex;
             justify-content: space-between;
@@ -103,78 +130,62 @@ export function printReportIsolated(printableHtml: string, title: string): boole
             z-index: 9999;
           }
 
-          /* Espaciador al pie para que las tablas no se superpongan con el footer fijo */
           .print-footer-spacer {
-            height: 28px;
+            height: 24px;
           }
 
-          /* Estilos de tablas */
+          /* Estilos de tablas ejecutivas compactas */
           table {
             width: 100% !important;
             border-collapse: collapse;
-            font-size: 10.5px;
-            page-break-inside: auto;
+            font-size: 10px;
           }
 
-          thead {
-            display: table-header-group;
-          }
-
-          tfoot {
-            display: table-footer-group;
-          }
-
-          /* Cada fila evita cortarse a la mitad */
           tr {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
           }
 
           th, td {
-            padding: 5px 8px;
+            padding: 4px 6px;
             border: 1px solid #cbd5e1;
           }
 
-          /* Regla estricta para bloques que no deben dividirse entre páginas:
-             Si la tabla o el bloque no entra en la hoja 1, salta completo a la hoja 2 */
-          .print-avoid-break,
-          .print-keep-together,
-          .print-table-section {
+          .print-avoid-break {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-            display: block !important;
-            margin-bottom: 14px;
           }
 
-          .signatures-section {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-            margin-top: 20px;
-            padding-top: 14px;
+          /* Grid y flex fallback en caso de falta de clases */
+          .grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
           }
-
-          /* Clases de utilidad */
-          .font-bold { font-weight: 700; }
-          .font-semibold { font-weight: 600; }
-          .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-          .text-right { text-align: right; }
-          .text-center { text-align: center; }
-          .text-left { text-align: left; }
-          .uppercase { text-transform: uppercase; }
-          .text-rose { color: #b91c1c; }
-          .text-emerald { color: #047857; }
-          .text-blue { color: #1d4ed8; }
-          .text-slate { color: #475569; }
+          .grid-3col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+          }
+          .grid-4col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 8px;
+          }
+          .flex-between {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
 
           @media screen {
             body {
-              padding: 20px;
+              padding: 16px;
             }
           }
         </style>
       </head>
       <body>
-        <!-- Pie de página fijo que se replica en todas las hojas impresas -->
         <div class="print-footer-fixed">
           <div>Documento confidencial emitido por el Sistema de Control de Certificaciones e Ingeniería TAGING. Prohibida su copia o distribución no autorizada.</div>
           <div style="font-weight: 600; color: #475569;">${title}</div>
@@ -190,7 +201,7 @@ export function printReportIsolated(printableHtml: string, title: string): boole
             setTimeout(function() {
               window.focus();
               window.print();
-            }, 250);
+            }, 300);
           });
         </script>
       </body>
@@ -198,7 +209,6 @@ export function printReportIsolated(printableHtml: string, title: string): boole
     `);
     iframeDoc.close();
 
-    // Invocar impresión con fallback
     setTimeout(() => {
       try {
         iframe.contentWindow?.focus();
@@ -206,7 +216,7 @@ export function printReportIsolated(printableHtml: string, title: string): boole
       } catch (err) {
         console.warn('Fallback al invocar impresión de iframe:', err);
       }
-    }, 400);
+    }, 450);
 
     return true;
   } catch (err) {
@@ -216,7 +226,7 @@ export function printReportIsolated(printableHtml: string, title: string): boole
 }
 
 /**
- * Abre el reporte en una ventana independiente limpia para impresión a pantalla completa
+ * Abre el reporte en una ventana independiente limpia para impresión
  */
 export function printHtmlInNewWindow(title: string, printableHtml: string): boolean {
   try {
@@ -225,6 +235,8 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
       return false;
     }
 
+    const parentStyles = getDocumentStyles();
+
     printWindow.document.open();
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -232,10 +244,11 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
       <head>
         <meta charset="UTF-8">
         <title>${title}</title>
+        ${parentStyles}
         <style>
           @page {
             size: A4 portrait;
-            margin: 10mm 12mm 14mm 12mm;
+            margin: 8mm 10mm 10mm 10mm;
           }
           * {
             box-sizing: border-box;
@@ -245,22 +258,27 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
           }
           body {
             margin: 0;
-            padding: 24px;
+            padding: 20px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background: #ffffff;
             color: #0f172a;
+            font-size: 10px;
+          }
+          svg {
+            max-width: 36px !important;
+            max-height: 36px !important;
           }
           .print-toolbar {
             position: sticky;
             top: 0;
             background: #0f172a;
             color: white;
-            padding: 12px 20px;
+            padding: 10px 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            border-radius: 10px;
-            margin-bottom: 24px;
+            border-radius: 8px;
+            margin-bottom: 20px;
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
             z-index: 1000;
           }
@@ -268,10 +286,10 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
             background: #0284c7;
             color: white;
             border: none;
-            padding: 8px 20px;
-            font-size: 13px;
+            padding: 7px 18px;
+            font-size: 12px;
             font-weight: 700;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
           }
           .btn-print:hover {
@@ -281,9 +299,9 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
             background: transparent;
             color: #94a3b8;
             border: 1px solid #334155;
-            padding: 8px 14px;
+            padding: 7px 12px;
             font-size: 12px;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
           }
           .btn-close:hover {
@@ -306,26 +324,17 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
               bottom: 0;
               left: 0;
               right: 0;
-              height: 22px;
+              height: 20px;
               border-top: 1px solid #cbd5e1;
-              padding-top: 4px;
-              font-size: 8.5px;
+              padding-top: 3px;
+              font-size: 8px;
               color: #64748b;
               display: flex !important;
               justify-content: space-between;
               align-items: center;
               background: #ffffff;
             }
-            .print-keep-together,
-            .print-table-section {
-              break-inside: avoid !important;
-              page-break-inside: avoid !important;
-              display: block !important;
-            }
-            table {
-              width: 100% !important;
-            }
-            tr {
+            .print-avoid-break {
               break-inside: avoid !important;
               page-break-inside: avoid !important;
             }
@@ -335,8 +344,8 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
       <body>
         <div class="print-toolbar">
           <div>
-            <strong style="font-size: 14px;">${title}</strong>
-            <div style="font-size: 11px; color: #94a3b8;">Listo para enviar a la impresora de tu equipo o Guardar como PDF</div>
+            <strong style="font-size: 13px;">${title}</strong>
+            <div style="font-size: 11px; color: #94a3b8;">Listo para imprimir o Guardar como PDF (ajustado para 1 sola hoja)</div>
           </div>
           <div style="display: flex; gap: 8px;">
             <button class="btn-print" onclick="window.print()">Imprimir / Guardar en PDF</button>

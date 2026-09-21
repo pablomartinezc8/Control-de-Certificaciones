@@ -14,9 +14,10 @@ export interface ExportPdfOptions {
 /**
  * Exporta un elemento HTML directamente a un archivo PDF estructurado y de alta resolución.
  * Garantiza:
- * 1. Fondo 100% blanco puro.
- * 2. Aprovechamiento óptimo de la hoja A4.
- * 3. Inclusión del pie de página oficial y numeración en TODAS las hojas del documento.
+ * 1. Fondo 100% blanco puro sin fondos oscuros de la web.
+ * 2. Formato ajustado exactamente a 1 SOLA HOJA A4 cuando el contenido es ejecutivo.
+ * 3. Elementos vectoriales y logotipos SVG con proporciones exactas.
+ * 4. Inclusión del pie de página institucional en el documento.
  */
 export async function exportElementToPdf(
   element: HTMLElement,
@@ -25,7 +26,7 @@ export async function exportElementToPdf(
   const orientation = options.orientation || 'portrait';
   const format = options.format || 'a4';
   const scale = options.scale || 2;
-  const marginMm = options.marginMm ?? 10;
+  const marginMm = options.marginMm ?? 8;
   const fileName = options.fileName || 'reporte_ejecutivo.pdf';
   const hideIds = options.hideElementIds || [];
 
@@ -42,23 +43,28 @@ export async function exportElementToPdf(
           if (el) el.style.display = 'none';
         });
 
-        // Asegurar tamaños explícitos en elementos SVG para Recharts y gráficos
+        // Asegurar tamaños explícitos en elementos SVG para evitar que se expandan
         const svgs = clonedDoc.querySelectorAll('svg');
         svgs.forEach((svg) => {
-          const width = svg.clientWidth || svg.getBoundingClientRect().width;
-          const height = svg.clientHeight || svg.getBoundingClientRect().height;
-          if (width > 0) svg.setAttribute('width', `${width}`);
-          if (height > 0) svg.setAttribute('height', `${height}`);
+          const width = svg.clientWidth || svg.getBoundingClientRect().width || 32;
+          const height = svg.clientHeight || svg.getBoundingClientRect().height || 32;
+          svg.setAttribute('width', `${width}`);
+          svg.setAttribute('height', `${height}`);
+          svg.style.maxWidth = `${width}px`;
+          svg.style.maxHeight = `${height}px`;
         });
 
-        // Forzar ancho completo y fondo blanco puro en el clon
+        // Forzar ancho estándar A4 (794px) y fondo blanco puro en el clon para consistencia exacta
         const root = clonedDoc.getElementById('printable-report-content');
         if (root) {
-          root.style.width = '100%';
-          root.style.maxWidth = '100%';
+          root.style.width = '794px';
+          root.style.maxWidth = '794px';
+          root.style.boxSizing = 'border-box';
           root.style.backgroundColor = '#ffffff';
           root.style.boxShadow = 'none';
           root.style.border = 'none';
+          root.style.margin = '0 auto';
+          root.style.padding = '20px 24px';
         }
       },
     });
@@ -67,7 +73,7 @@ export async function exportElementToPdf(
     const pdfWidth = orientation === 'portrait' ? (format === 'a4' ? 210 : 215.9) : (format === 'a4' ? 297 : 279.4);
     const pdfHeight = orientation === 'portrait' ? (format === 'a4' ? 297 : 279.4) : (format === 'a4' ? 210 : 215.9);
 
-    const footerReservedMm = 10; // Espacio reservado para el pie de página en cada hoja
+    const footerReservedMm = 8; // Espacio reservado para el pie de página
     const contentWidth = pdfWidth - marginMm * 2;
     const contentHeight = (canvas.height * contentWidth) / canvas.width;
     const pageHeightAvailable = pdfHeight - marginMm * 2 - footerReservedMm;
@@ -80,8 +86,8 @@ export async function exportElementToPdf(
     });
 
     if (contentHeight <= pageHeightAvailable) {
-      // Entra en una sola página
-      const imgData = canvas.toDataURL('image/jpeg', 0.96);
+      // Entra perfectamente en UNA SOLA HOJA (1-Page Executive Summary)
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
       pdf.addImage(imgData, 'JPEG', marginMm, marginMm, contentWidth, contentHeight);
     } else {
       // Documento multipágina: segmentar canvas respetando el espacio del pie de página
@@ -116,7 +122,7 @@ export async function exportElementToPdf(
             chunkHeight
           );
 
-          const chunkImgData = tempCanvas.toDataURL('image/jpeg', 0.96);
+          const chunkImgData = tempCanvas.toDataURL('image/jpeg', 0.98);
           const chunkMmHeight = (chunkHeight * contentWidth) / canvas.width;
           pdf.addImage(chunkImgData, 'JPEG', marginMm, marginMm, contentWidth, chunkMmHeight);
         }
@@ -126,27 +132,27 @@ export async function exportElementToPdf(
       }
     }
 
-    // Agregar pie de página y numeración en TODAS las hojas
+    // Agregar pie de página y numeración oficial en TODAS las hojas
     const totalPages = pdf.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       pdf.setPage(i);
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(7.5);
+      pdf.setFontSize(7);
       pdf.setTextColor(100, 116, 139); // slate-500
 
       // Línea divisoria superior del pie de página
-      const lineY = pdfHeight - marginMm - 4;
+      const lineY = pdfHeight - marginMm - 3;
       pdf.setDrawColor(226, 232, 240); // slate-200
       pdf.setLineWidth(0.2);
       pdf.line(marginMm, lineY, pdfWidth - marginMm, lineY);
 
-      // Texto de confidencialidad
+      // Texto de confidencialidad institucional
       const footerNotice =
         'Documento confidencial emitido por el Sistema de Control de Certificaciones e Ingeniería TAGING. Prohibida su copia o distribución no autorizada.';
       pdf.text(footerNotice, marginMm, pdfHeight - marginMm);
 
-      // Número de página
-      const pageStr = `${i} / ${totalPages}`;
+      // Número de página (si es 1 sola hoja dice "Página 1 de 1" o número según corresponda)
+      const pageStr = totalPages === 1 ? 'Página 1 de 1' : `${i} / ${totalPages}`;
       const textWidth = pdf.getTextWidth(pageStr);
       pdf.text(pageStr, pdfWidth - marginMm - textWidth, pdfHeight - marginMm);
     }

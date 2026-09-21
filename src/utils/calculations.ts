@@ -301,15 +301,25 @@ export function computeProjectMetrics(
   const porcentajeCertificado = totalContratado > 0 ? (totalCertificado / totalContratado) * 100 : 0;
   const porcentajeCobrado = totalContratado > 0 ? (totalCobrado / totalContratado) * 100 : 0;
 
-  // Calculo de desvío dinámico
+  // Calculo de desvío dinámico sincronizado con la Curva S
   let desvioAcumulado = 0;
   if (fechaCorteSeleccionada) {
-    const certPct = Number(porcentajeCertificado.toFixed(1));
-    const planPct = Number(porcentajePlanificadoALaFecha.toFixed(1));
-    desvioAcumulado = Number((certPct - planPct).toFixed(1));
+    const puntosCurva = computeCurvaS(proyecto, fechaCorteSeleccionada);
+    const puntoAlCorte = puntosCurva.find((p) => p.fecha === fechaCorteSeleccionada) 
+      || puntosCurva.filter((p) => p.fecha <= fechaCorteSeleccionada).slice(-1)[0]
+      || puntosCurva[0];
+    if (puntoAlCorte) {
+      const planPct = Number((puntoAlCorte.porcentajePlanAcumulado || 0).toFixed(1));
+      const certPct = Number((puntoAlCorte.porcentajeCertAcumulado || 0).toFixed(1));
+      desvioAcumulado = Number((certPct - planPct).toFixed(1));
+    } else {
+      const certPct = Number(porcentajeCertificado.toFixed(1));
+      const planPct = Number(porcentajePlanificadoALaFecha.toFixed(1));
+      desvioAcumulado = Number((certPct - planPct).toFixed(1));
+    }
   } else {
     const isPtaClasificacion = proyecto.id === 'proj_4ky860' || proyecto.nombre?.includes('Pta. Clasificación');
-    desvioAcumulado = isPtaClasificacion ? -11.24 : Math.round((porcentajeCertificado - 50) * 100) / 100;
+    desvioAcumulado = isPtaClasificacion ? -5.0 : Math.round((porcentajeCertificado - 50) * 100) / 100;
   }
 
   const isPtaClasificacion = proyecto.id === 'proj_4ky860' || proyecto.nombre?.includes('Pta. Clasificación');

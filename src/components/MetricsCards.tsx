@@ -14,13 +14,16 @@ import {
 interface MetricsCardsProps {
   metrics: ProyectoMetrics;
   empresaNombre?: string;
+  desvio?: number;
 }
 
 export const MetricsCards: React.FC<MetricsCardsProps> = ({ 
   metrics, 
-  empresaNombre = 'EMPRESA' 
+  empresaNombre = 'EMPRESA',
+  desvio,
 }) => {
   const empUpper = (empresaNombre || 'EMPRESA').toUpperCase();
+  const displayDesvio = desvio !== undefined ? desvio : metrics.desvioAcumulado;
 
   return (
     <div className="space-y-3.5 mb-6">
@@ -193,16 +196,19 @@ export const MetricsCards: React.FC<MetricsCardsProps> = ({
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               DESVÍO ACUMULADO
             </span>
-            <div className={`p-2 rounded-lg ${metrics.desvioAcumulado < 0 ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'}`}>
-              {metrics.desvioAcumulado < 0 ? (
+            <div className={`p-2 rounded-lg ${displayDesvio < 0 ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'}`}>
+              {displayDesvio < 0 ? (
                 <TrendingDown className="w-4 h-4" />
               ) : (
                 <TrendingUp className="w-4 h-4" />
               )}
             </div>
           </div>
-          <div className={`mt-2 text-2xl font-bold tracking-tight ${metrics.desvioAcumulado < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-            {metrics.desvioAcumulado > 0 ? '+' : ''}{metrics.desvioAcumulado.toFixed(2).replace('.', ',')}%
+          <div className={`mt-2 text-2xl font-bold tracking-tight ${displayDesvio < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            {displayDesvio > 0 ? '+' : ''}{displayDesvio.toFixed(1).replace('.', ',')}%
+          </div>
+          <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+            {displayDesvio < 0 ? 'Atraso contractual al corte' : 'Avance en fecha / Adelantado'}
           </div>
         </div>
 

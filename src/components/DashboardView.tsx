@@ -286,6 +286,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <MetricsCards 
           metrics={metrics} 
           empresaNombre={proyecto.empresas[0]?.nombre || 'Taging'} 
+          desvio={desvio}
         />
       </div>
 
