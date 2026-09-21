@@ -779,7 +779,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-5 space-y-5">
         {/* Tab Navigation matching Base44 Reference Image */}
-        <div className="bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-1.5 shadow-xs overflow-x-auto">
+        <div id="app-tabs-navigation" className="no-print bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-1.5 shadow-xs overflow-x-auto">
           <div className="flex items-center gap-1 min-w-max">
             <button
               onClick={() => setActiveTab('dashboard')}

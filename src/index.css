@@ -1,1 +1,69 @@
 @import "tailwindcss";
+
+@media print {
+  /* Forzar la impresión exacta de colores, gráficos y fondos */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Configuración de página: A4 vertical */
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm 12mm 10mm;
+  }
+
+  /* Ocultar elementos de navegación e interactividad */
+  header,
+  nav,
+  #app-header,
+  #app-tabs-navigation,
+  #dashboard-header-actions,
+  .no-print,
+  button:not(.allow-print),
+  select {
+    display: none !important;
+  }
+
+  /* Fondo blanco y texto oscuro nítido para reporte formal */
+  body, html {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Evitar cortes de tarjetas y filas de tabla entre páginas */
+  .break-inside-avoid,
+  tr,
+  table,
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Expandir tablas y scrollbars para que se imprima todo el contenido */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .max-h-96,
+  .max-h-80 {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .shadow-xs,
+  .shadow-sm,
+  .shadow-md {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+}

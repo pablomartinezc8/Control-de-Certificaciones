@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className={`${themeStyle === 'futurista' ? 'bg-[#060D1A] border-cyan-900/50 shadow-[0_4px_20px_rgba(0,112,243,0.15)]' : 'bg-[#0B1528] border-slate-800/80'} text-white border-b sticky top-0 z-30 shadow-md transition-colors duration-200`}>
+    <header id="app-header" className={`no-print ${themeStyle === 'futurista' ? 'bg-[#060D1A] border-cyan-900/50 shadow-[0_4px_20px_rgba(0,112,243,0.15)]' : 'bg-[#0B1528] border-slate-800/80'} text-white border-b sticky top-0 z-30 shadow-md transition-colors duration-200`}>
       <div className="w-full px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           {/* Left Brand and Title */}
