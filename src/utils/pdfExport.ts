@@ -8,11 +8,15 @@ export interface ExportPdfOptions {
   scale?: number;
   marginMm?: number;
   hideElementIds?: string[];
+  projectTitle?: string;
 }
 
 /**
  * Exporta un elemento HTML directamente a un archivo PDF estructurado y de alta resolución.
- * Soporta documentos de una o múltiples páginas con ajuste automático de escala y márgenes.
+ * Garantiza:
+ * 1. Fondo 100% blanco puro.
+ * 2. Aprovechamiento óptimo de la hoja A4.
+ * 3. Inclusión del pie de página oficial y numeración en TODAS las hojas del documento.
  */
 export async function exportElementToPdf(
   element: HTMLElement,
@@ -46,6 +50,16 @@ export async function exportElementToPdf(
           if (width > 0) svg.setAttribute('width', `${width}`);
           if (height > 0) svg.setAttribute('height', `${height}`);
         });
+
+        // Forzar ancho completo y fondo blanco puro en el clon
+        const root = clonedDoc.getElementById('printable-report-content');
+        if (root) {
+          root.style.width = '100%';
+          root.style.maxWidth = '100%';
+          root.style.backgroundColor = '#ffffff';
+          root.style.boxShadow = 'none';
+          root.style.border = 'none';
+        }
       },
     });
 
@@ -53,8 +67,10 @@ export async function exportElementToPdf(
     const pdfWidth = orientation === 'portrait' ? (format === 'a4' ? 210 : 215.9) : (format === 'a4' ? 297 : 279.4);
     const pdfHeight = orientation === 'portrait' ? (format === 'a4' ? 297 : 279.4) : (format === 'a4' ? 210 : 215.9);
 
+    const footerReservedMm = 10; // Espacio reservado para el pie de página en cada hoja
     const contentWidth = pdfWidth - marginMm * 2;
     const contentHeight = (canvas.height * contentWidth) / canvas.width;
+    const pageHeightAvailable = pdfHeight - marginMm * 2 - footerReservedMm;
 
     const pdf = new jsPDF({
       orientation,
@@ -63,14 +79,12 @@ export async function exportElementToPdf(
       compress: true,
     });
 
-    const pageHeightAvailable = pdfHeight - marginMm * 2;
-
     if (contentHeight <= pageHeightAvailable) {
-      // Entra perfectamente en una sola página
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      // Entra en una sola página
+      const imgData = canvas.toDataURL('image/jpeg', 0.96);
       pdf.addImage(imgData, 'JPEG', marginMm, marginMm, contentWidth, contentHeight);
     } else {
-      // Documento multipágina: segmentar canvas por páginas para evitar cortes abruptos
+      // Documento multipágina: segmentar canvas respetando el espacio del pie de página
       const pxPerPage = (canvas.width / contentWidth) * pageHeightAvailable;
       let renderedHeight = 0;
       let pageIndex = 0;
@@ -82,7 +96,6 @@ export async function exportElementToPdf(
 
         const chunkHeight = Math.min(pxPerPage, canvas.height - renderedHeight);
 
-        // Crear canvas temporal para la porción de la página
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = canvas.width;
         tempCanvas.height = chunkHeight;
@@ -103,7 +116,7 @@ export async function exportElementToPdf(
             chunkHeight
           );
 
-          const chunkImgData = tempCanvas.toDataURL('image/jpeg', 0.95);
+          const chunkImgData = tempCanvas.toDataURL('image/jpeg', 0.96);
           const chunkMmHeight = (chunkHeight * contentWidth) / canvas.width;
           pdf.addImage(chunkImgData, 'JPEG', marginMm, marginMm, contentWidth, chunkMmHeight);
         }
@@ -111,6 +124,31 @@ export async function exportElementToPdf(
         renderedHeight += chunkHeight;
         pageIndex++;
       }
+    }
+
+    // Agregar pie de página y numeración en TODAS las hojas
+    const totalPages = pdf.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      pdf.setPage(i);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(100, 116, 139); // slate-500
+
+      // Línea divisoria superior del pie de página
+      const lineY = pdfHeight - marginMm - 4;
+      pdf.setDrawColor(226, 232, 240); // slate-200
+      pdf.setLineWidth(0.2);
+      pdf.line(marginMm, lineY, pdfWidth - marginMm, lineY);
+
+      // Texto de confidencialidad
+      const footerNotice =
+        'Documento confidencial emitido por el Sistema de Control de Certificaciones e Ingeniería TAGING. Prohibida su copia o distribución no autorizada.';
+      pdf.text(footerNotice, marginMm, pdfHeight - marginMm);
+
+      // Número de página
+      const pageStr = `${i} / ${totalPages}`;
+      const textWidth = pdf.getTextWidth(pageStr);
+      pdf.text(pageStr, pdfWidth - marginMm - textWidth, pdfHeight - marginMm);
     }
 
     pdf.save(fileName);

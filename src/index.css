@@ -1,39 +1,63 @@
 @import "tailwindcss";
 
 @media print {
-  /* Forzar la impresión exacta de colores, gráficos y fondos */
+  /* Forzar la impresión exacta de colores, gráficos y fondos sin alteraciones */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
 
-  /* Configuración de página: A4 vertical */
+  /* Configuración de página: A4 vertical con márgenes optimizados para aprovechar la hoja */
   @page {
     size: A4 portrait;
-    margin: 10mm 10mm 12mm 10mm;
+    margin: 10mm 12mm 14mm 12mm;
   }
 
-  /* Ocultar elementos de navegación e interactividad */
+  /* Fondo 100% blanco puro y texto oscuro nítido */
+  html,
+  body {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Ocultar elementos de navegación, modales opacos e interactividad web */
   header,
   nav,
   #app-header,
   #app-tabs-navigation,
   #dashboard-header-actions,
   .no-print,
-  button:not(.allow-print),
-  select {
+  button,
+  select,
+  .print-hide {
     display: none !important;
   }
 
-  /* Fondo blanco y texto oscuro nítido para reporte formal */
-  body, html {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    font-size: 11px !important;
+  /* Cuando el modal de reporte está abierto, eliminar overlay oscuro y marcos */
+  .print-modal-overlay {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    position: static !important;
     padding: 0 !important;
     margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .print-modal-card {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
     width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
   }
 
   main {
@@ -42,22 +66,52 @@
     max-width: 100% !important;
   }
 
-  /* Evitar cortes de tarjetas y filas de tabla entre páginas */
+  /* Evitar cortes abruptos en tablas, tarjetas y bloques clave.
+     Si una tabla no cabe completa en la hoja actual, salta completa a la hoja siguiente */
   .break-inside-avoid,
-  tr,
-  table,
-  .print-avoid-break {
+  .print-keep-together,
+  .print-table-section,
+  .print-avoid-break,
+  tr {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
 
-  /* Expandir tablas y scrollbars para que se imprima todo el contenido */
+  .print-table-section {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  /* Expandir tablas y scrollbars para que se imprima todo el contenido sin barras */
   .overflow-x-auto,
   .overflow-y-auto,
   .max-h-96,
   .max-h-80 {
     overflow: visible !important;
     max-height: none !important;
+  }
+
+  /* Pie de página repetido en CADA hoja impresa */
+  .print-page-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 22px;
+    border-top: 1px solid #cbd5e1;
+    font-size: 8.5px;
+    color: #64748b;
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    padding: 0 4px;
+    z-index: 9999;
   }
 
   .shadow-xs,

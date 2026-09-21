@@ -119,7 +119,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div ref={dashboardCardRef} className="space-y-6">
+    <>
+      <div ref={dashboardCardRef} className={`space-y-6 ${isPrintModalOpen ? 'print:hidden' : ''}`}>
       {/* Encabezado Oficial exclusivo para Impresión directa en Papel / PDF */}
       <div className="hidden print:block mb-6 pb-4 border-b-2 border-slate-900 bg-white">
         <div className="flex items-center justify-between">
@@ -485,9 +486,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span className="text-[10px] text-slate-500">{proyecto.empresas?.[0]?.nombre || 'Mandante'}</span>
         </div>
       </div>
+    </div>
 
-      {/* Modal de Impresión con Impresoras del Sistema y Exportación a PDF */}
-      <PrintReportModal
+    {/* Modal de Impresión con Impresoras del Sistema y Exportación a PDF */}
+    <PrintReportModal
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         proyecto={proyecto}
@@ -501,6 +503,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         montoPlanificado={puntoAlCorte?.planificadoAcumulado || 0}
         montoCertificado={puntoAlCorte?.certificadoAcumulado || 0}
       />
-    </div>
+    </>
   );
 };
