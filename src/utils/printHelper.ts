@@ -96,12 +96,20 @@ export function printReportIsolated(printableHtml: string, title: string): boole
             width: 100% !important;
           }
 
-          /* Control estricto de SVG para evitar que se expandan */
-          svg {
+          /* Control de SVG: iconos compactos pero gráficos a tamaño completo */
+          svg:not(.chart-svg):not(.recharts-surface) {
             display: inline-block;
             vertical-align: middle;
-            max-width: 36px !important;
-            max-height: 36px !important;
+            max-width: 36px;
+            max-height: 36px;
+          }
+
+          svg.chart-svg, .recharts-surface {
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
+            display: block !important;
           }
 
           .report-root {
@@ -264,9 +272,16 @@ export function printHtmlInNewWindow(title: string, printableHtml: string): bool
             color: #0f172a;
             font-size: 10px;
           }
-          svg {
-            max-width: 36px !important;
-            max-height: 36px !important;
+          svg:not(.chart-svg):not(.recharts-surface) {
+            max-width: 36px;
+            max-height: 36px;
+          }
+          svg.chart-svg, .recharts-surface {
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
+            display: block !important;
           }
           .print-toolbar {
             position: sticky;

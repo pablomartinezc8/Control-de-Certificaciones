@@ -46,6 +46,9 @@ export async function exportElementToPdf(
         // Asegurar tamaños explícitos en elementos SVG para evitar que se expandan
         const svgs = clonedDoc.querySelectorAll('svg');
         svgs.forEach((svg) => {
+          if (svg.classList.contains('chart-svg') || svg.classList.contains('recharts-surface')) {
+            return;
+          }
           const width = svg.clientWidth || svg.getBoundingClientRect().width || 32;
           const height = svg.clientHeight || svg.getBoundingClientRect().height || 32;
           svg.setAttribute('width', `${width}`);

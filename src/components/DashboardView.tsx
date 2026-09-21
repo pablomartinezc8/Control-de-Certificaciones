@@ -503,6 +503,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         desvio={desvio}
         montoPlanificado={puntoAlCorte?.planificadoAcumulado || 0}
         montoCertificado={puntoAlCorte?.certificadoAcumulado || 0}
+        puntosCurva={puntosCurva}
       />
     </>
   );
