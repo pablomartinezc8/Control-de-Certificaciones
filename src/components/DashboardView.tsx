@@ -77,6 +77,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return getVencimientosHitos(proyecto, selectedCutoffDate);
   }, [proyecto, selectedCutoffDate]);
 
+  // Filtro de horizonte para los próximos vencimientos (7, 15, 30 días o todos, por defecto 15 días)
+  const [horizonteProximos, setHorizonteProximos] = useState<7 | 15 | 30 | 'todos'>(15);
+
+  // Próximos filtrados por el horizonte temporal elegido (por defecto <= 15 días para no saturar)
+  const proximosFiltrados = useMemo(() => {
+    if (horizonteProximos === 'todos') return proximos;
+    return proximos.filter((p) => p.diasDiferencia <= horizonteProximos);
+  }, [proximos, horizonteProximos]);
+
+  const totalMontoProximos = useMemo(() => {
+    return proximosFiltrados.reduce((acc, p) => acc + (p.montoHito || 0), 0);
+  }, [proximosFiltrados]);
+
   // Puntos de la curva al corte seleccionado
   const puntosCurva = useMemo(() => {
     return computeCurvaS(proyecto, selectedCutoffDate);
@@ -388,7 +401,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Tabla: Próximos Vencimientos */}
         <div className="bg-white border border-blue-200/90 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-4 bg-blue-50/50 border-b border-blue-100 flex items-center justify-between">
+          <div className="p-4 bg-blue-50/50 border-b border-blue-100 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
                 <Clock className="w-4 h-4" />
@@ -398,19 +411,57 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Próximos Vencimientos Contractuales
                 </h4>
                 <p className="text-[11px] text-blue-700">
-                  Hitos pendientes de certificar ordenados por fecha de entrega prevista.
+                  {horizonteProximos === 'todos'
+                    ? `Todos los hitos futuros pendientes (${formatCurrency(totalMontoProximos)} programados).`
+                    : `Hitos a vencer dentro de los próximos ${horizonteProximos} días (${formatCurrency(totalMontoProximos)} programados).`}
                 </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-blue-200/80 text-blue-900">
-              {proximos.length} {proximos.length === 1 ? 'próximo' : 'próximos'}
-            </span>
+
+            <div className="flex items-center gap-2">
+              {/* Selector de Horizonte: 7 días, 15 días, 30 días, Todos */}
+              <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-blue-200 shadow-2xs">
+                {([7, 15, 30, 'todos'] as const).map((dias) => {
+                  const isSelected = horizonteProximos === dias;
+                  const label = dias === 'todos' ? 'Todos' : `${dias} días`;
+                  const tooltip = dias === 'todos' ? 'Mostrar todos los hitos futuros' : `Mostrar hitos dentro de ${dias} días`;
+                  return (
+                    <button
+                      key={dias}
+                      type="button"
+                      onClick={() => setHorizonteProximos(dias)}
+                      title={tooltip}
+                      className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                        isSelected
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-blue-900 hover:bg-blue-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-blue-200/80 text-blue-900 shrink-0">
+                {proximosFiltrados.length} {proximosFiltrados.length === 1 ? 'próximo' : 'próximos'}
+              </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto max-h-96">
-            {proximos.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                No hay próximos vencimientos programados.
+            {proximosFiltrados.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                <p>No se registran vencimientos contractuales dentro de los próximos {horizonteProximos} días.</p>
+                {horizonteProximos !== 'todos' && proximos.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setHorizonteProximos(30)}
+                    className="text-blue-600 hover:underline font-semibold"
+                  >
+                    Ampliar horizonte a 30 días o ver todos ({proximos.length} futuros)
+                  </button>
+                )}
               </div>
             ) : (
               <table className="w-full text-left text-xs border-collapse">
@@ -424,7 +475,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {proximos.slice(0, 15).map((p) => (
+                  {proximosFiltrados.map((p) => (
                     <tr key={p.id} className="hover:bg-blue-50/30 transition-colors">
                       <td className="py-2.5 px-3">
                         <div className="font-semibold text-slate-900">{p.entregableCodigo} - {p.hitoNombre}</div>
@@ -440,9 +491,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </td>
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                          p.diasDiferencia <= 7
+                          p.diasDiferencia <= 3
+                            ? 'bg-rose-100 text-rose-800'
+                            : p.diasDiferencia <= 7
                             ? 'bg-amber-100 text-amber-800'
-                            : 'bg-slate-100 text-slate-700'
+                            : 'bg-blue-100 text-blue-800'
                         }`}>
                           {p.diasDiferencia === 0 ? 'Hoy' : `${p.diasDiferencia} días`}
                         </span>
@@ -497,7 +550,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         selectedCutoffDate={selectedCutoffDate}
         metrics={metrics}
         vencidos={vencidos}
-        proximos={proximos}
+        proximos={proximosFiltrados}
         avancePlan={avancePlan}
         avanceReal={avanceReal}
         desvio={desvio}
