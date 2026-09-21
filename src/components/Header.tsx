@@ -21,7 +21,7 @@ interface HeaderProps {
   proyectoActualId: string;
   onSelectProyecto: (id: string) => void;
   onAddProyecto: (nombre: string) => void;
-  onRenameProyecto?: (id: string, nuevoNombre: string) => void;
+  onRenameProyecto?: (id: string, nuevoNombre: string, nuevaEmpresa?: string) => void;
   onOpenNewCert: () => void;
   onSaveData: () => void;
   onUndo: () => void;
@@ -51,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [newProjName, setNewProjName] = useState('');
   const [editProjName, setEditProjName] = useState('');
+  const [editEmpresaName, setEditEmpresaName] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const currentProject = proyectos.find((p) => p.id === proyectoActualId) || proyectos[0];
@@ -126,19 +127,20 @@ export const Header: React.FC<HeaderProps> = ({
                 <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2 pointer-events-none" />
               </div>
 
-              {/* Botón Modificar / Configurar Nombre del Proyecto */}
+              {/* Botón Modificar / Configurar Nombre del Proyecto y Empresa */}
               <button
                 type="button"
                 onClick={() => {
                   setEditProjName(currentProject?.nombre || '');
+                  setEditEmpresaName(currentProject?.empresas?.[0]?.nombre || '');
                   setShowRenameModal(true);
                 }}
                 id="btn-renombrar-proyecto"
-                title="Modificar nombre del proyecto"
+                title="Configurar proyecto y empresa cliente"
                 className="flex items-center justify-center p-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-slate-700 transition-colors"
               >
                 <Pencil className="w-3.5 h-3.5" />
-                <span className="sr-only">Modificar nombre</span>
+                <span className="sr-only">Configurar proyecto</span>
               </button>
 
               {/* Botón Nuevo Proyecto */}
@@ -373,7 +375,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      {/* Modal Modificar Nombre del Proyecto */}
+      {/* Modal Modificar Nombre del Proyecto y Empresa Mandante */}
       {showRenameModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 text-slate-900 animate-in fade-in zoom-in-95 duration-150">
@@ -383,7 +385,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">Configurar Proyecto</h3>
-                <p className="text-xs text-slate-500">Modifica el nombre oficial del proyecto actual</p>
+                <p className="text-xs text-slate-500">Modifica el nombre del proyecto y la empresa con la que se trabaja</p>
               </div>
             </div>
 
@@ -391,7 +393,7 @@ export const Header: React.FC<HeaderProps> = ({
               onSubmit={(e) => {
                 e.preventDefault();
                 if (editProjName.trim() && onRenameProyecto) {
-                  onRenameProyecto(currentProject.id, editProjName.trim());
+                  onRenameProyecto(currentProject.id, editProjName.trim(), editEmpresaName.trim());
                   setShowRenameModal(false);
                 }
               }}
@@ -405,11 +407,27 @@ export const Header: React.FC<HeaderProps> = ({
                   type="text"
                   value={editProjName}
                   onChange={(e) => setEditProjName(e.target.value)}
-                  placeholder="Ej: Proyecto El Abra - Expansión Fase 2"
+                  placeholder="Ej: Cabinas Filtro Prensa VEL"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                   required
                   autoFocus
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Empresa / Mandante con la que se trabaja
+                </label>
+                <input
+                  type="text"
+                  value={editEmpresaName}
+                  onChange={(e) => setEditEmpresaName(e.target.value)}
+                  placeholder="Ej: VEL, Minera Escondida, Techint..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Este nombre reemplaza a &quot;Taging&quot; en la pestaña principal de entregables (ej: &quot;VEL (33)&quot;) y en los encabezados.
+                </p>
               </div>
 
               <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 text-xs space-y-1.5 text-slate-600">
@@ -422,7 +440,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="text-slate-800 font-semibold">{currentProject.entregables?.length || 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Empresas en este proyecto:</span>
+                  <span className="text-slate-500">Empresas registradas:</span>
                   <span className="text-slate-800 font-semibold">{empresasCount}</span>
                 </div>
               </div>

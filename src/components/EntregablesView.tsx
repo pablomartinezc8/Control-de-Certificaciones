@@ -146,7 +146,7 @@ export const EntregablesView: React.FC<EntregablesViewProps> = ({
         <div className="flex items-center gap-2.5">
           <FileText className="w-5 h-5 text-sky-400" />
           <h2 className="text-base sm:text-lg font-bold tracking-tight">
-            Certificaciones de Taging
+            Certificaciones de {proyecto.empresas?.[0]?.nombre || 'Entregables'}
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">

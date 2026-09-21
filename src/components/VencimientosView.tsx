@@ -54,7 +54,7 @@ export const VencimientosView: React.FC<VencimientosViewProps> = ({
             <AlertCircle className="w-4 h-4 text-rose-500" />
           </div>
           <div className="mt-2 text-2xl font-bold text-rose-600">{countVencidos}</div>
-          <div className="mt-1 text-[11px] text-slate-400">Fecha contractual pasada</div>
+          <div className="mt-1 text-[11px] text-slate-400">Sin cobrar con fecha pasada</div>
         </div>
 
         <div
@@ -147,9 +147,15 @@ export const VencimientosView: React.FC<VencimientosViewProps> = ({
                       <span className="font-bold text-xs text-slate-900">{item.codigo}</span>
                       <span className="text-xs text-slate-600 font-medium">— {item.hitoNombre}</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        item.tipo === 'hito' ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-700'
+                        item.diasRestantes < 0
+                          ? 'bg-rose-100 text-rose-800'
+                          : item.tipo === 'hito'
+                          ? 'bg-slate-100 text-slate-700'
+                          : 'bg-emerald-50 text-emerald-700'
                       }`}>
-                        {item.tipo === 'hito' ? 'Hito de entrega' : 'Cobro Certificado'}
+                        {item.tipo === 'hito' 
+                          ? (item.diasRestantes < 0 ? 'Vencido sin cobrar' : 'Hito de entrega') 
+                          : (item.diasRestantes < 0 ? 'Cobro atrasado' : 'Cobro Certificado')}
                       </span>
                     </div>
 

@@ -4,11 +4,11 @@ export const INITIAL_DATA: AppData = {
   "proyectos": [
     {
       "id": "proj_4ky860",
-      "nombre": "Pta. Clasificación",
+      "nombre": "Cabinas Filtro Prensa VEL",
       "empresas": [
         {
           "id": "emp_taging",
-          "nombre": "Taging",
+          "nombre": "VEL",
           "color": "blue"
         }
       ],

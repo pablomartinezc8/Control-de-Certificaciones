@@ -580,11 +580,21 @@ export function getVencimientosHitos(
 
     (e.hitos || []).forEach((h) => {
       const valorHito = (valorEfectivo * (Number(h.porcentaje) || 0)) / 100;
-      const certSum = (h.certificados || []).reduce((acc, c) => acc + (Number(c.importe) || 0), 0);
+      const certs = h.certificados || [];
+      const certSum = certs.reduce((acc, c) => acc + (Number(c.importe) || 0), 0);
       const saldo = Math.max(0, valorHito - certSum);
+      const baseValHito = (Number(e.valorTotal) * Number(h.porcentaje)) / 100;
 
-      // Solo consideramos hitos con saldo pendiente por certificar
-      if (saldo > 1) {
+      // Si todos los certificados emitidos para este hito ya están cobrados y cubren el hito,
+      // se considera completamente cobrado y NO debe mostrarse como vencido ni pendiente
+      const isCobrado = certs.length > 0 &&
+        certs.every((c) => c.estado === 'Cobrado') &&
+        (saldo <= 50 || certSum >= baseValHito - 1);
+
+      if (isCobrado) return;
+
+      // Solo consideramos hitos con saldo pendiente por certificar > 50
+      if (saldo > 50) {
         const fPlan = getHitoPlannedDate(e, h) || h.fechaManual || '';
         if (!fPlan) return;
 
@@ -779,6 +789,178 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
   });
 }
 
+export interface GastosCertificadoBreakdown {
+  id: string;
+  numero: string;
+  nombre: string;
+  importeTotal: number;
+  baseParte: number;
+  gastosParte: number;
+  estado: string;
+  fecha: string;
+}
+
+export interface GastosEntregableBreakdown {
+  id: string;
+  codigo: string;
+  descripcion: string;
+  esCHO: boolean;
+  gastoAsignado: number;
+  gastoCobrado: number;
+  gastoCertificado: number;
+  gastoRestante: number;
+  porcentajeCobrado: number;
+}
+
+export interface GastosTracking {
+  totalGastos: number;
+  totalBase: number;
+  totalProyecto: number;
+  gastosCobrados: number;
+  gastosCertificados: number;
+  gastosPendientesCobro: number;
+  gastosRestantes: number;
+  porcentajeCobrado: number;
+  porcentajeCertificado: number;
+  porcentajeRestante: number;
+  porcentajeAvanceGlobal: number;
+  certificados: GastosCertificadoBreakdown[];
+  entregables: GastosEntregableBreakdown[];
+}
+
+export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTracking {
+  if (!proyecto || !proyecto.entregables) {
+    return {
+      totalGastos: 0,
+      totalBase: 0,
+      totalProyecto: 0,
+      gastosCobrados: 0,
+      gastosCertificados: 0,
+      gastosPendientesCobro: 0,
+      gastosRestantes: 0,
+      porcentajeCobrado: 0,
+      porcentajeCertificado: 0,
+      porcentajeRestante: 0,
+      porcentajeAvanceGlobal: 0,
+      certificados: [],
+      entregables: [],
+    };
+  }
+
+  const totalGastos = getTotalGastosGenerales(proyecto);
+  const totalBase = proyecto.entregables.reduce((s, e) => s + (Number(e.valorTotal) || 0), 0);
+  const totalProyecto = totalBase + totalGastos;
+  const docs = getGroupedCertificates(proyecto);
+
+  let totalGastosCobrados = 0;
+  let totalGastosCertificados = 0;
+
+  const certificados: GastosCertificadoBreakdown[] = docs.map((doc) => {
+    let docGastos = 0;
+    let docBase = 0;
+
+    doc.actividades.forEach((act) => {
+      const ent = proyecto.entregables.find((e) => e.id === act.entregableId);
+      if (!ent) return;
+      const baseEnt = Number(ent.valorTotal) || 0;
+      const gastoEnt = ent.esCHO ? 0 : getGastoPorEntregable(proyecto);
+      const totalEnt = baseEnt + gastoEnt;
+      const ratioGasto = totalEnt > 0 ? gastoEnt / totalEnt : 0;
+      const ratioBase = totalEnt > 0 ? baseEnt / totalEnt : 0;
+
+      const imp = Number(act.importe ?? act.cobrado ?? act.pendiente) || 0;
+      docGastos += imp * ratioGasto;
+      docBase += imp * ratioBase;
+    });
+
+    if (doc.estado === 'Cobrado') {
+      totalGastosCobrados += docGastos;
+    }
+    totalGastosCertificados += docGastos;
+
+    return {
+      id: doc.id,
+      numero: doc.numero || String(doc.item),
+      nombre: doc.nombre,
+      importeTotal: Math.round(doc.importeTotal * 100) / 100,
+      baseParte: Math.round(docBase * 100) / 100,
+      gastosParte: Math.round(docGastos * 100) / 100,
+      estado: doc.estado,
+      fecha: doc.fechaCobro || doc.fechaPresentacion || '',
+    };
+  });
+
+  const entregables: GastosEntregableBreakdown[] = proyecto.entregables.map((ent) => {
+    const baseEnt = Number(ent.valorTotal) || 0;
+    const gastoAsignado = ent.esCHO ? 0 : getGastoPorEntregable(proyecto);
+    const totalEfectivo = baseEnt + gastoAsignado;
+    const ratioGasto = totalEfectivo > 0 ? gastoAsignado / totalEfectivo : 0;
+
+    let gastoCobrado = 0;
+    let gastoCertificado = 0;
+
+    ent.hitos.forEach((h) => {
+      h.certificados.forEach((c) => {
+        const imp = Number(c.importe) || 0;
+        gastoCertificado += imp * ratioGasto;
+        if (c.estado === 'Cobrado') {
+          gastoCobrado += imp * ratioGasto;
+        }
+      });
+    });
+
+    const gastoRestante = Math.max(0, gastoAsignado - gastoCobrado);
+    const porcentajeCobrado = gastoAsignado > 0 ? (gastoCobrado / gastoAsignado) * 100 : 0;
+
+    return {
+      id: ent.id,
+      codigo: ent.codigo,
+      descripcion: ent.descripcion,
+      esCHO: Boolean(ent.esCHO),
+      gastoAsignado: Math.round(gastoAsignado * 100) / 100,
+      gastoCobrado: Math.round(gastoCobrado * 100) / 100,
+      gastoCertificado: Math.round(gastoCertificado * 100) / 100,
+      gastoRestante: Math.round(gastoRestante * 100) / 100,
+      porcentajeCobrado: Math.round(porcentajeCobrado * 10) / 10,
+    };
+  });
+
+  const gastosPendientesCobro = Math.max(0, totalGastosCertificados - totalGastosCobrados);
+  const gastosRestantes = Math.max(0, totalGastos - totalGastosCobrados);
+  const porcentajeCobrado = totalGastos > 0 ? (totalGastosCobrados / totalGastos) * 100 : 0;
+  const porcentajeCertificado = totalGastos > 0 ? (totalGastosCertificados / totalGastos) * 100 : 0;
+  const porcentajeRestante = totalGastos > 0 ? (gastosRestantes / totalGastos) * 100 : 0;
+
+  // Avance global del proyecto cobrado
+  let totalCobradoGlobal = 0;
+  proyecto.entregables.forEach((e) => {
+    e.hitos.forEach((h) => {
+      h.certificados.forEach((c) => {
+        if (c.estado === 'Cobrado') {
+          totalCobradoGlobal += Number(c.importe) || 0;
+        }
+      });
+    });
+  });
+  const porcentajeAvanceGlobal = totalProyecto > 0 ? (totalCobradoGlobal / totalProyecto) * 100 : 0;
+
+  return {
+    totalGastos: Math.round(totalGastos * 100) / 100,
+    totalBase: Math.round(totalBase * 100) / 100,
+    totalProyecto: Math.round(totalProyecto * 100) / 100,
+    gastosCobrados: Math.round(totalGastosCobrados * 100) / 100,
+    gastosCertificados: Math.round(totalGastosCertificados * 100) / 100,
+    gastosPendientesCobro: Math.round(gastosPendientesCobro * 100) / 100,
+    gastosRestantes: Math.round(gastosRestantes * 100) / 100,
+    porcentajeCobrado: Math.round(porcentajeCobrado * 10) / 10,
+    porcentajeCertificado: Math.round(porcentajeCertificado * 10) / 10,
+    porcentajeRestante: Math.round(porcentajeRestante * 10) / 10,
+    porcentajeAvanceGlobal: Math.round(porcentajeAvanceGlobal * 10) / 10,
+    certificados,
+    entregables,
+  };
+}
+
 // Compute project alerts
 export function computeAlertas(proyecto: Proyecto | undefined): AlertaItem[] {
   if (!proyecto || !proyecto.entregables) return [];
@@ -924,7 +1106,7 @@ export function computeConciliacion(proyecto: Proyecto | undefined): Conciliacio
   });
 }
 
-// Compute upcoming milestone and certificate due dates
+// Compute upcoming milestone and certificate due dates (only uncollected / sin cobrar items)
 export function computeVencimientos(proyecto: Proyecto | undefined): VencimientoItem[] {
   if (!proyecto || !proyecto.entregables) return [];
 
@@ -933,30 +1115,41 @@ export function computeVencimientos(proyecto: Proyecto | undefined): Vencimiento
 
   proyecto.entregables.forEach((e) => {
     e.hitos.forEach((h) => {
-      // If not fully certified, consider planned date
-      const hasCert = h.certificados.length > 0;
-      const targetDateStr = getHitoPlannedDate(e, h);
-      if (targetDateStr) {
-        const targetDate = new Date(targetDateStr);
-        const diffDays = Math.round((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        const monto = getHitoValorEfectivo(e, h, proyecto);
+      const valorHito = getHitoValorEfectivo(e, h, proyecto);
+      const certs = h.certificados || [];
+      const certSum = certs.reduce((acc, c) => acc + (Number(c.importe) || 0), 0);
+      const saldoCert = Math.max(0, valorHito - certSum);
+      const baseValHito = (Number(e.valorTotal) * Number(h.porcentaje)) / 100;
 
-        items.push({
-          id: `venc_${e.id}_${h.id}`,
-          entregableId: e.id,
-          codigo: e.codigo,
-          descripcion: e.descripcion,
-          hitoNombre: h.nombre,
-          fechaVencimiento: targetDateStr,
-          monto,
-          tipo: 'hito',
-          diasRestantes: diffDays,
-          estado: hasCert ? 'Certificado' : diffDays < 0 ? 'Vencido' : 'Pendiente',
-        });
+      // Un hito se considera cobrado si tiene certificados cobrados que cubren su importe
+      const isFullyCobrado = certs.length > 0 &&
+        certs.every((c) => c.estado === 'Cobrado') &&
+        (saldoCert <= 50 || certSum >= baseValHito - 1);
+
+      // Si no está cobrado y tiene saldo pendiente por certificar, se incluye el hito previsto
+      if (!isFullyCobrado && saldoCert > 50) {
+        const targetDateStr = getHitoPlannedDate(e, h);
+        if (targetDateStr) {
+          const targetDate = new Date(targetDateStr);
+          const diffDays = Math.round((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          items.push({
+            id: `venc_${e.id}_${h.id}`,
+            entregableId: e.id,
+            codigo: e.codigo,
+            descripcion: e.descripcion,
+            hitoNombre: h.nombre,
+            fechaVencimiento: targetDateStr,
+            monto: Math.round(saldoCert * 100) / 100,
+            tipo: 'hito',
+            diasRestantes: diffDays,
+            estado: diffDays < 0 ? 'Vencido sin certificar' : 'Pendiente',
+          });
+        }
       }
 
-      // Check certificate payment due dates
-      h.certificados.forEach((c) => {
+      // Check certificate payment due dates (solo certificados que NO han sido cobrados aún)
+      certs.forEach((c) => {
         if (c.estado !== 'Cobrado') {
           const cobroDateStr = normalizeDate(c.fechaCobro || c.fechaPresentacion);
           if (cobroDateStr) {
@@ -972,7 +1165,7 @@ export function computeVencimientos(proyecto: Proyecto | undefined): Vencimiento
               monto: Number(c.importe) || 0,
               tipo: 'certificado',
               diasRestantes: diffDays,
-              estado: c.estado,
+              estado: diffDays < 0 ? 'Cobro vencido' : c.estado,
             });
           }
         }

@@ -18,9 +18,9 @@ interface MetricsCardsProps {
 
 export const MetricsCards: React.FC<MetricsCardsProps> = ({ 
   metrics, 
-  empresaNombre = 'TAGING' 
+  empresaNombre = 'EMPRESA' 
 }) => {
-  const empUpper = (empresaNombre || 'TAGING').toUpperCase();
+  const empUpper = (empresaNombre || 'EMPRESA').toUpperCase();
 
   return (
     <div className="space-y-3.5 mb-6">

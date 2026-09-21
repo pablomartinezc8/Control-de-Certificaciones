@@ -114,6 +114,13 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.proyectos && parsed.proyectos.length > 0) {
+          // Si la empresa principal aún tiene el nombre interno "Taging", actualizarla con la empresa cliente ("VEL")
+          parsed.proyectos = parsed.proyectos.map((p: any) => {
+            if (p.empresas && p.empresas.length > 0 && p.empresas[0].nombre === 'Taging') {
+              p.empresas[0] = { ...p.empresas[0], nombre: 'VEL' };
+            }
+            return p;
+          });
           return parsed;
         }
       }
@@ -213,14 +220,28 @@ export default function App() {
     }));
   };
 
-  const handleRenameProyecto = (id: string, nuevoNombre: string) => {
-    const clean = nuevoNombre.trim();
-    if (!clean) return;
+  const handleRenameProyecto = (id: string, nuevoNombre: string, nuevaEmpresa?: string) => {
+    const cleanNombre = nuevoNombre.trim();
+    const cleanEmpresa = nuevaEmpresa?.trim();
+    if (!cleanNombre) return;
     updateAppData((prev) => ({
       ...prev,
-      proyectos: prev.proyectos.map((p) =>
-        p.id === id ? { ...p, nombre: clean } : p
-      ),
+      proyectos: prev.proyectos.map((p) => {
+        if (p.id !== id) return p;
+        let updatedEmpresas = [...p.empresas];
+        if (cleanEmpresa) {
+          if (updatedEmpresas.length > 0) {
+            updatedEmpresas[0] = { ...updatedEmpresas[0], nombre: cleanEmpresa };
+          } else {
+            updatedEmpresas = [{ id: `emp_${Date.now()}`, nombre: cleanEmpresa, color: 'blue' }];
+          }
+        }
+        return {
+          ...p,
+          nombre: cleanNombre,
+          empresas: updatedEmpresas,
+        };
+      }),
     }));
   };
 
@@ -770,7 +791,7 @@ export default function App() {
               }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>Dashboard / Carátula</span>
+              <span>Dashboard</span>
             </button>
 
             <button
@@ -783,7 +804,7 @@ export default function App() {
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Taging ({currentProject.entregables.length})</span>
+              <span>{currentProject.empresas?.[0]?.nombre || 'Entregables'} ({currentProject.entregables.length})</span>
             </button>
 
             <button
