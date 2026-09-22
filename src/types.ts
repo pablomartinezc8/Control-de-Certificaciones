@@ -48,6 +48,9 @@ export interface Entregable {
   ordenCompra?: string;
   observaciones?: string;
   empresa?: string;
+  unidad?: string;
+  cantidad?: number;
+  precioUnitario?: number;
 }
 
 export interface Empresa {

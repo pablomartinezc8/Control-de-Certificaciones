@@ -155,11 +155,11 @@ export const MetricsCards: React.FC<MetricsCardsProps> = ({
 
       {/* Fila 3: Proyecciones y Desvíos */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Card 9: PRÓXIMA CERTIFICACIÓN */}
+        {/* Card 9: PRÓXIMO CORTE */}
         <div className="bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-4 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              PRÓXIMA CERTIFICACIÓN
+              PRÓXIMO CORTE
             </span>
             <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-cyan-400">
               <Calendar className="w-4 h-4" />
@@ -167,26 +167,49 @@ export const MetricsCards: React.FC<MetricsCardsProps> = ({
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              {metrics.proximaCertificacionFecha}
+              {metrics.proximaCertificacionFecha || '-'}
             </div>
-            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {formatCurrency(metrics.proximaCertificacionImporte)}
-            </div>
+            {metrics.diasHastaProximoCorte !== null && metrics.diasHastaProximoCorte !== undefined && (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                metrics.diasHastaProximoCorte <= 3
+                  ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                  : metrics.diasHastaProximoCorte <= 7
+                  ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                  : 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300'
+              }`}>
+                {metrics.diasHastaProximoCorte === 0 ? 'Hoy' : `En ${metrics.diasHastaProximoCorte} días`}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+            Siguiente hito de control cronograma
           </div>
         </div>
 
-        {/* Card 10: IMPORTE PRÓXIMO PERÍODO */}
+        {/* Card 10: PROYECTADO PRÓXIMO CORTE */}
         <div className="bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-4 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              IMPORTE PRÓXIMO PERÍODO
+              PROYECTADO PRÓXIMO CORTE
             </span>
             <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-cyan-400">
               <Wallet className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            {formatCurrency(metrics.importeProximoPeriodo)}
+            {formatCurrency(metrics.proximaCertificacionImporte)}
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+            <span>
+              {metrics.totalContratado > 0 && metrics.proximaCertificacionImporte > 0
+                ? `${((metrics.proximaCertificacionImporte / metrics.totalContratado) * 100).toFixed(1).replace('.', ',')}% del contrato`
+                : 'Monto del período'}
+            </span>
+            {metrics.valorProyectadoProximoCorte !== undefined && metrics.valorProyectadoProximoCorte > 0 && (
+              <span className="font-medium text-slate-500 dark:text-slate-400">
+                Meta acum. {formatCurrency(metrics.valorProyectadoProximoCorte)}
+              </span>
+            )}
           </div>
         </div>
 

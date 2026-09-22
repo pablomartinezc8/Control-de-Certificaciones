@@ -638,12 +638,12 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 
                   {/* Fila 3 */}
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
-                    <span className="text-[8.5px] uppercase font-bold text-slate-400 block leading-tight">Próxima Certificación</span>
-                    <strong className="text-xs text-slate-900 block mt-0.5">{metrics.proximaCertificacionFecha}</strong>
+                    <span className="text-[8.5px] uppercase font-bold text-slate-400 block leading-tight">Próximo Corte</span>
+                    <strong className="text-xs text-slate-900 block mt-0.5">{metrics.proximaCertificacionFecha || '-'}</strong>
                   </div>
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
-                    <span className="text-[8.5px] uppercase font-bold text-slate-400 block leading-tight">Importe Próximo Período</span>
-                    <strong className="text-xs text-blue-900 font-mono block mt-0.5">{formatCurrency(metrics.importeProximoPeriodo)}</strong>
+                    <span className="text-[8.5px] uppercase font-bold text-slate-400 block leading-tight">Proyectado Próximo Corte</span>
+                    <strong className="text-xs text-blue-900 font-mono block mt-0.5">{formatCurrency(metrics.proximaCertificacionImporte)}</strong>
                   </div>
                   <div className={`p-2 rounded-lg border ${desvio >= 0 ? 'bg-teal-50/50 border-teal-200' : 'bg-rose-50/50 border-rose-200'}`}>
                     <span className="text-[8.5px] uppercase font-bold text-slate-500 block leading-tight">Desvío Acumulado</span>

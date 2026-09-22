@@ -24,6 +24,9 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
     descripcion: '',
     categoria: '',
     valorTotal: 0,
+    unidad: '',
+    cantidad: undefined as number | undefined,
+    precioUnitario: undefined as number | undefined,
     fechaBase: new Date().toISOString().split('T')[0],
     tipoDistribucion: 'estandar',
     ordenCompra: '',
@@ -44,6 +47,9 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
     if (initialEntregable) {
       setFormData({
         ...initialEntregable,
+        unidad: initialEntregable.unidad || '',
+        cantidad: initialEntregable.cantidad,
+        precioUnitario: initialEntregable.precioUnitario,
         fechaBase: normalizeDate(initialEntregable.fechaBase) || '',
         fechaFinProyecto: normalizeDate(initialEntregable.fechaFinProyecto) || '2026-12-31',
         diasRevision: initialEntregable.diasRevision ?? 21,
@@ -153,6 +159,9 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
       descripcion: formData.descripcion?.trim() || '',
       categoria: formData.categoria?.trim() || 'Ingeniería',
       valorTotal: Number(formData.valorTotal) || 0,
+      unidad: formData.unidad?.trim() || undefined,
+      cantidad: formData.cantidad !== undefined && !isNaN(formData.cantidad) ? Number(formData.cantidad) : undefined,
+      precioUnitario: formData.precioUnitario !== undefined && !isNaN(formData.precioUnitario) ? Number(formData.precioUnitario) : undefined,
       fechaBase: fBase,
       tipoDistribucion: formData.tipoDistribucion || 'estandar',
       porcentajes: formData.porcentajes || { emisionB: 60, emision0: 30, restante: 10 },
@@ -245,24 +254,87 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
             />
           </div>
 
-          {/* Fila 3: Categoría / disciplina & Valor total */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Categoría / disciplina
-              </label>
-              <input
-                type="text"
-                value={formData.categoria}
-                onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-                placeholder="Ingeniería, Gerencia y Costos..."
-                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
-              />
+          {/* Fila 3: Categoría / disciplina */}
+          <div>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Categoría / disciplina / especialidad
+            </label>
+            <input
+              type="text"
+              value={formData.categoria}
+              onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+              placeholder="Estructuras, Hormigón, Instalaciones..."
+              className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
+            />
+          </div>
+
+          {/* Fila Cómputo Métrico y Presupuesto */}
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900 dark:text-white">
+                Cómputo Métrico y Presupuesto de Obra
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Opcional para cálculo automático
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
+                  Unidad de medida
+                </label>
+                <input
+                  type="text"
+                  value={formData.unidad || ''}
+                  onChange={(e) => setFormData({ ...formData, unidad: e.target.value })}
+                  placeholder="m3, m2, ml, kg, un, gl..."
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
+                  Cantidad / Cómputo
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={formData.cantidad ?? ''}
+                  onChange={(e) => {
+                    const cant = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                    const pu = formData.precioUnitario;
+                    const autoTotal = cant !== undefined && pu !== undefined ? Math.round(cant * pu * 100) / 100 : formData.valorTotal;
+                    setFormData({ ...formData, cantidad: cant, valorTotal: autoTotal });
+                  }}
+                  placeholder="Ej: 150"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
+                  Precio Unitario ($)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={formData.precioUnitario ?? ''}
+                  onChange={(e) => {
+                    const pu = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                    const cant = formData.cantidad;
+                    const autoTotal = cant !== undefined && pu !== undefined ? Math.round(cant * pu * 100) / 100 : formData.valorTotal;
+                    setFormData({ ...formData, precioUnitario: pu, valorTotal: autoTotal });
+                  }}
+                  placeholder="Ej: 250.00"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Valor total
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Valor Total Contratado ($)
               </label>
               <input
                 type="number"
@@ -271,7 +343,7 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
                 value={formData.valorTotal || 0}
                 onChange={(e) => setFormData({ ...formData, valorTotal: parseFloat(e.target.value) || 0 })}
                 placeholder="0"
-                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
+                className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-mono font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
               />
             </div>
           </div>

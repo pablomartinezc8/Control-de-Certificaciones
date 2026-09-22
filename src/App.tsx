@@ -32,6 +32,7 @@ import { FechasCorteView } from './components/FechasCorteView';
 import { GastosView } from './components/GastosView';
 import { ImportarExportarView } from './components/ImportarExportarView';
 import { AyudaView } from './components/AyudaView';
+import { ModoCampoView } from './components/ModoCampoView';
 
 // Modals
 import { EntregableModal } from './components/EntregableModal';
@@ -51,7 +52,8 @@ import {
   CalendarDays, 
   DollarSign, 
   FileCode, 
-  HelpCircle 
+  HelpCircle,
+  ClipboardCheck
 } from 'lucide-react';
 
 const STORAGE_KEY = 'base44_engineering_project_data';
@@ -71,6 +73,7 @@ const INITIAL_FILTROS: FiltrosState = {
 
 type ActiveTabType = 
   | 'dashboard'
+  | 'modo_campo'
   | 'taging'
   | 'proyecciones'
   | 'curva_s'
@@ -774,6 +777,8 @@ export default function App() {
         onUpdateEmpresas={handleUpdateEmpresas}
         themeStyle={themeStyle}
         onToggleThemeStyle={setThemeStyle}
+        activeTab={activeTab}
+        onSelectTab={(tab) => setActiveTab(tab as ActiveTabType)}
       />
 
       {/* Main Content Area */}
@@ -792,6 +797,19 @@ export default function App() {
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
               <span>Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('modo_campo')}
+              id="tab-modo-campo"
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-bold text-xs transition-colors ${
+                activeTab === 'modo_campo'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800'
+              }`}
+            >
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              <span>Modo Campo 👷</span>
             </button>
 
             <button
@@ -946,6 +964,18 @@ export default function App() {
               proyecto={currentProject}
               onNavigateToTab={(tab) => setActiveTab(tab as ActiveTabType)}
               onOpenNewCert={(entId, hitoId) => handleOpenNewCert(entId, hitoId)}
+            />
+          )}
+
+          {activeTab === 'modo_campo' && (
+            <ModoCampoView
+              proyecto={currentProject}
+              onUpdateEntregable={handleSaveEntregable}
+              onSaveCertificado={handleSaveCertificado}
+              onSaveData={() => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+              }}
+              onSwitchToDesktopView={() => setActiveTab('dashboard')}
             />
           )}
 

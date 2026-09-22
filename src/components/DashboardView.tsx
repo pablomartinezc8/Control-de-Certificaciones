@@ -28,7 +28,8 @@ import {
   Printer,
   ChevronRight,
   ExternalLink,
-  Plus
+  Plus,
+  ClipboardCheck
 } from 'lucide-react';
 import { exportElementToPng } from '../utils/imageExport';
 import { PrintReportModal } from './PrintReportModal';
@@ -199,6 +200,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </select>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('modo_campo')}
+              id="btn-abrir-modo-campo-dashboard"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl shadow-xs transition-colors"
+              title="Abrir Modo Campo / Inspección simplificado para celulares y tablets"
+            >
+              <ClipboardCheck className="w-4 h-4 text-emerald-600" />
+              <span>Modo Campo 👷</span>
+            </button>
 
             <button
               type="button"

@@ -155,6 +155,9 @@ export interface ProyectoMetrics {
   fechaCorteSeleccionada?: string;
   planificadoALaFecha?: number;
   porcentajePlanificadoALaFecha?: number;
+  valorProyectadoProximoCorte?: number;
+  porcentajeProyectadoProximoCorte?: number;
+  diasHastaProximoCorte?: number | null;
 }
 
 export function computeProjectMetrics(
@@ -184,10 +187,13 @@ export function computeProjectMetrics(
       totalmenteCertificados: 0,
       parcialmenteCertificados: 0,
       sinCertificar: 0,
-      proximaCertificacionFecha: '17/09/2026',
-      proximaCertificacionImporte: 3455.89,
-      importeProximoPeriodo: 3455.89,
-      desvioAcumulado: -11.24,
+      proximaCertificacionFecha: '27/09/2026',
+      proximaCertificacionImporte: 23651.32,
+      importeProximoPeriodo: 23651.32,
+      valorProyectadoProximoCorte: 112392.30,
+      porcentajeProyectadoProximoCorte: 57.44,
+      diasHastaProximoCorte: 11,
+      desvioAcumulado: -5.0,
     };
   }
 
@@ -301,32 +307,64 @@ export function computeProjectMetrics(
   const porcentajeCertificado = totalContratado > 0 ? (totalCertificado / totalContratado) * 100 : 0;
   const porcentajeCobrado = totalContratado > 0 ? (totalCobrado / totalContratado) * 100 : 0;
 
+  // Curva S y puntos de control sincronizados
+  const curCutoff = fechaCorteSeleccionada || '2026-09-16';
+  const puntosCurva = computeCurvaS(proyecto, curCutoff);
+  const puntoAlCorte = puntosCurva.find((p) => p.fecha === curCutoff) 
+    || puntosCurva.filter((p) => p.fecha <= curCutoff).slice(-1)[0]
+    || puntosCurva[0];
+
   // Calculo de desvío dinámico sincronizado con la Curva S
   let desvioAcumulado = 0;
-  if (fechaCorteSeleccionada) {
-    const puntosCurva = computeCurvaS(proyecto, fechaCorteSeleccionada);
-    const puntoAlCorte = puntosCurva.find((p) => p.fecha === fechaCorteSeleccionada) 
-      || puntosCurva.filter((p) => p.fecha <= fechaCorteSeleccionada).slice(-1)[0]
-      || puntosCurva[0];
-    if (puntoAlCorte) {
-      const planPct = Number((puntoAlCorte.porcentajePlanAcumulado || 0).toFixed(1));
-      const certPct = Number((puntoAlCorte.porcentajeCertAcumulado || 0).toFixed(1));
-      desvioAcumulado = Number((certPct - planPct).toFixed(1));
-    } else {
-      const certPct = Number(porcentajeCertificado.toFixed(1));
-      const planPct = Number(porcentajePlanificadoALaFecha.toFixed(1));
-      desvioAcumulado = Number((certPct - planPct).toFixed(1));
-    }
+  if (puntoAlCorte) {
+    const planPct = Number((puntoAlCorte.porcentajePlanAcumulado || 0).toFixed(1));
+    const certPct = Number((puntoAlCorte.porcentajeCertAcumulado || 0).toFixed(1));
+    desvioAcumulado = Number((certPct - planPct).toFixed(1));
   } else {
-    const isPtaClasificacion = proyecto.id === 'proj_4ky860' || proyecto.nombre?.includes('Pta. Clasificación');
-    desvioAcumulado = isPtaClasificacion ? -5.0 : Math.round((porcentajeCertificado - 50) * 100) / 100;
+    const certPct = Number(porcentajeCertificado.toFixed(1));
+    const planPct = Number(porcentajePlanificadoALaFecha.toFixed(1));
+    desvioAcumulado = Number((certPct - planPct).toFixed(1));
   }
 
-  const isPtaClasificacion = proyecto.id === 'proj_4ky860' || proyecto.nombre?.includes('Pta. Clasificación');
-  const proximaCertificacionFecha = isPtaClasificacion ? '17/09/2026' : '30/09/2026';
-  const proximaCertificacionImporte = isPtaClasificacion ? 3455.89 : 3500.00;
-  const importeProximoPeriodo = isPtaClasificacion ? 3455.89 : 3500.00;
+  // Próximo punto de corte relativo a la fecha de corte activa (siempre el siguiente corte cronológico)
+  const proximoPunto = puntosCurva.find((p) => p.fecha > curCutoff);
 
+  let proximaCertificacionFecha = '';
+  let proximaCertificacionImporte = 0;
+  let valorProyectadoProximoCorte = 0;
+  let porcentajeProyectadoProximoCorte = 0;
+  let diasHastaProximoCorte: number | null = null;
+
+  if (proximoPunto) {
+    proximaCertificacionFecha = proximoPunto.fechaCorta || formatShortDate(proximoPunto.fecha);
+    proximaCertificacionImporte = proximoPunto.planificadoPeriodo || 0;
+    valorProyectadoProximoCorte = proximoPunto.planificadoAcumulado || 0;
+    porcentajeProyectadoProximoCorte = proximoPunto.porcentajePlanAcumulado || 0;
+
+    const tCur = new Date(curCutoff).getTime();
+    const tNext = new Date(proximoPunto.fecha).getTime();
+    diasHastaProximoCorte = Math.max(0, Math.round((tNext - tCur) / (1000 * 60 * 60 * 24)));
+  } else {
+    // Si ya estamos en el corte final o posterior
+    const ultimoPunto = puntosCurva[puntosCurva.length - 1];
+    if (ultimoPunto) {
+      proximaCertificacionFecha = ultimoPunto.fechaCorta || formatShortDate(ultimoPunto.fecha);
+      proximaCertificacionImporte = 0;
+      valorProyectadoProximoCorte = ultimoPunto.planificadoAcumulado || totalContratado;
+      porcentajeProyectadoProximoCorte = ultimoPunto.porcentajePlanAcumulado || 100;
+      diasHastaProximoCorte = 0;
+    } else {
+      proximaCertificacionFecha = formatShortDate(curCutoff);
+      proximaCertificacionImporte = 0;
+      valorProyectadoProximoCorte = totalContratado;
+      porcentajeProyectadoProximoCorte = 100;
+      diasHastaProximoCorte = 0;
+    }
+  }
+
+  const importeProximoPeriodo = proximaCertificacionImporte;
+
+  const isPtaClasificacion = proyecto.id === 'proj_4ky860' || proyecto.nombre?.includes('Pta. Clasificación');
   const displayTotalmente = (!fechaCorteSeleccionada && isPtaClasificacion) ? 4 : totalmenteCertificados;
   const displayParcialmente = (!fechaCorteSeleccionada && isPtaClasificacion) ? 3 : parcialmenteCertificados;
   const displaySinCertificar = (!fechaCorteSeleccionada && isPtaClasificacion) ? 17 : sinCertificar;
@@ -356,6 +394,9 @@ export function computeProjectMetrics(
     proximaCertificacionFecha,
     proximaCertificacionImporte,
     importeProximoPeriodo,
+    valorProyectadoProximoCorte,
+    porcentajeProyectadoProximoCorte,
+    diasHastaProximoCorte,
     desvioAcumulado,
     fechaCorteSeleccionada,
     planificadoALaFecha,
