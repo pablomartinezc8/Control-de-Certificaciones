@@ -59,17 +59,28 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
 
   const todayStr = '2026-09-16';
 
+  const defaultActualDate = useMemo(() => {
+    const past = todasLasFechasCorte.filter((d) => d <= todayStr);
+    return past[past.length - 1] || todasLasFechasCorte[todasLasFechasCorte.length - 1] || todayStr;
+  }, [todasLasFechasCorte]);
+
   // Fecha de corte seleccionada local si no viene por prop
   const [internalCutoffDate, setInternalCutoffDate] = useState<string>(() => {
     if (selectedCutoffDateProp) return selectedCutoffDateProp;
-    const past = todasLasFechasCorte.filter((d) => d <= todayStr);
-    return past[past.length - 1] || todasLasFechasCorte[todasLasFechasCorte.length - 1] || todayStr;
+    try {
+      const saved = localStorage.getItem(`curva_cutoff_${proyecto.id}`);
+      if (saved && todasLasFechasCorte.includes(saved)) return saved;
+    } catch {}
+    return defaultActualDate;
   });
 
   const activeCutoffDate = selectedCutoffDateProp || internalCutoffDate;
 
   const handleSelectDate = (date: string) => {
     setInternalCutoffDate(date);
+    try {
+      localStorage.setItem(`curva_cutoff_${proyecto.id}`, date);
+    } catch {}
     if (onCutoffDateChange) {
       onCutoffDateChange(date);
     }
@@ -256,10 +267,20 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                 >
                   {todasLasFechasCorte.map((f) => (
                     <option key={f} value={f}>
-                      {f} {f === todayStr ? '(Actual)' : ''}
+                      {f} {f === defaultActualDate ? '(Actual)' : ''}
                     </option>
                   ))}
                 </select>
+                {activeCutoffDate !== defaultActualDate && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectDate(defaultActualDate)}
+                    className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline font-semibold text-left"
+                    title={`Restablecer a la fecha de corte actual (${defaultActualDate})`}
+                  >
+                    Volver a actual
+                  </button>
+                )}
               </div>
             </div>
 

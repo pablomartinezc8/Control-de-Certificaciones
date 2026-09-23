@@ -13,6 +13,7 @@ import {
   Clock, 
   AlertCircle, 
   ChevronRight, 
+  ChevronDown,
   Plus, 
   Check, 
   Sparkles,
@@ -24,14 +25,17 @@ import {
   MessageSquare,
   TrendingUp,
   Percent,
-  RotateCcw,
-  ArrowUpDown
+  FileText,
+  ShieldCheck,
+  ExternalLink,
+  ArrowRight,
+  Info
 } from 'lucide-react';
 
 interface ModoCampoViewProps {
   proyecto: Proyecto;
   onUpdateEntregable: (entregable: Entregable) => void;
-  onSaveCertificado: (
+  onSaveCertificado?: (
     entregableId: string,
     hitoId: string,
     certificado: Certificado,
@@ -39,25 +43,22 @@ interface ModoCampoViewProps {
   ) => void;
   onSaveData?: () => void;
   onSwitchToDesktopView?: () => void;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
   proyecto,
   onUpdateEntregable,
-  onSaveCertificado,
   onSaveData,
   onSwitchToDesktopView,
+  onNavigateToTab,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoria, setSelectedCategoria] = useState<string>('TODAS');
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendientes' | 'en_curso' | 'completados'>('todos');
-  const [fechaInspeccion, setFechaInspeccion] = useState<string>(
-    () => new Date().toISOString().split('T')[0]
-  );
   const [savedFeedbackId, setSavedFeedbackId] = useState<string | null>(null);
-  const [activeEditingId, setActiveEditingId] = useState<string | null>(null);
-  const [tempPctInput, setTempPctInput] = useState<Record<string, number>>({});
   const [tempNotes, setTempNotes] = useState<Record<string, string>>({});
+  const [expandedCertHist, setExpandedCertHist] = useState<Record<string, boolean>>({});
 
   // Categorías disponibles
   const categorias = useMemo(() => {
@@ -74,10 +75,12 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
       const valorEfectivo = getEntregableValorEfectivo(ent, proyecto);
       let certTotal = 0;
       let lastCertDate = '';
+      const allCerts: { hitoNombre: string; cert: Certificado }[] = [];
 
       ent.hitos.forEach((h) => {
         h.certificados.forEach((c) => {
           certTotal += Number(c.importe) || 0;
+          allCerts.push({ hitoNombre: h.nombre, cert: c });
           if (c.fechaPresentacion && (!lastCertDate || c.fechaPresentacion > lastCertDate)) {
             lastCertDate = c.fechaPresentacion;
           }
@@ -94,7 +97,7 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
         estado = 'en_curso';
       }
 
-      // Cantidad certificada estimada en base a la unidad
+      // Cantidad certificada estimada en base a la unidad de cómputo
       const cantidadTotal = ent.cantidad ?? 0;
       const cantidadCertificada = cantidadTotal > 0 ? (cantidadTotal * pctAvance) / 100 : 0;
 
@@ -108,6 +111,7 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
         lastCertDate,
         cantidadTotal,
         cantidadCertificada,
+        allCerts,
       };
     });
   }, [proyecto]);
@@ -170,104 +174,25 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
   }, [entregablesData, searchTerm, selectedCategoria, filtroEstado]);
 
   /**
-   * Registra un nuevo porcentaje de avance físico acumulado directamente
+   * Guarda notas de relevamiento de campo en el entregable sin emitir certificados
    */
-  const handleApplyAvance = (ent: Entregable, nuevoPct: number) => {
-    const clampedPct = Math.min(100, Math.max(0, Math.round(nuevoPct * 10) / 10));
-    const valorEfectivo = getEntregableValorEfectivo(ent, proyecto);
-    const montoMeta = (valorEfectivo * clampedPct) / 100;
-
-    // Calcular cuánto ya está certificado
-    let certTotalActual = 0;
-    ent.hitos.forEach((h) => {
-      h.certificados.forEach((c) => {
-        certTotalActual += Number(c.importe) || 0;
-      });
+  const handleSaveObservation = (ent: Entregable) => {
+    const nota = tempNotes[ent.id] !== undefined ? tempNotes[ent.id] : (ent.observaciones || '');
+    onUpdateEntregable({
+      ...ent,
+      observaciones: nota,
     });
-
-    const diferenciaAcreditar = montoMeta - certTotalActual;
-
-    if (Math.abs(diferenciaAcreditar) < 0.01) {
-      setSavedFeedbackId(ent.id);
-      setTimeout(() => setSavedFeedbackId(null), 2000);
-      return;
-    }
-
-    // Buscamos el hito al cual imputar la certificación
-    // Si hay un hito pendiente o el primer hito disponible
-    const hitos = ent.hitos || [];
-    if (hitos.length === 0) return;
-
-    // Seleccionamos el hito más adecuado: el primer hito que tenga saldo o el último
-    let targetHito = hitos[0];
-    let acumuladoHitos = 0;
-
-    for (const h of hitos) {
-      const hitoVal = (valorEfectivo * (Number(h.porcentaje) || 0)) / 100;
-      let hitoCert = 0;
-      h.certificados.forEach((c) => (hitoCert += Number(c.importe) || 0));
-
-      if (hitoCert < hitoVal - 1) {
-        targetHito = h;
-        break;
-      }
-      acumuladoHitos += hitoVal;
-    }
-
-    if (diferenciaAcreditar > 0) {
-      // Crear certificado de avance de inspección
-      const newCert: Certificado = {
-        id: `cert_campo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        nombre: `Inspección de Campo (${clampedPct}%)`,
-        numero: `IC-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
-        fechaPresentacion: fechaInspeccion,
-        fechaAprobacion: fechaInspeccion,
-        fechaCobro: '',
-        importe: Math.round(diferenciaAcreditar * 100) / 100,
-        tipo: 'Avance Físico',
-        estado: 'Aprobado',
-        observaciones: tempNotes[ent.id] || `Avance registrado en inspección de campo (${clampedPct}% acumulado)`,
-      };
-
-      onSaveCertificado(ent.id, targetHito.id, newCert, false);
-    } else {
-      // Si el porcentaje ingresado es menor al existente, ajustamos el último certificado
-      const ultimoHito = hitos[hitos.length - 1];
-      const newCert: Certificado = {
-        id: `cert_campo_${Date.now()}_ajuste`,
-        nombre: `Ajuste de Campo (${clampedPct}%)`,
-        numero: `AJ-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
-        fechaPresentacion: fechaInspeccion,
-        fechaAprobacion: fechaInspeccion,
-        fechaCobro: '',
-        importe: Math.round(diferenciaAcreditar * 100) / 100,
-        tipo: 'Ajuste Medición',
-        estado: 'Aprobado',
-        observaciones: `Ajuste físico en campo a ${clampedPct}%`,
-      };
-      onSaveCertificado(ent.id, ultimoHito.id, newCert, false);
-    }
-
-    // Actualizar notas si se ingresaron
-    if (tempNotes[ent.id]) {
-      onUpdateEntregable({
-        ...ent,
-        observaciones: tempNotes[ent.id],
-      });
-    }
-
     setSavedFeedbackId(ent.id);
     setTimeout(() => setSavedFeedbackId(null), 2500);
-    setActiveEditingId(null);
   };
 
-  const handleQuickAddPct = (ent: Entregable, currentPct: number, addPct: number) => {
-    handleApplyAvance(ent, Math.min(100, currentPct + addPct));
+  const toggleHistorial = (id: string) => {
+    setExpandedCertHist((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
-    <div id="modo-campo-view" className="space-y-4 pb-20 sm:pb-8">
-      {/* Top Banner: Modo Campo */}
+    <div id="modo-campo-view" className="space-y-4 pb-24 sm:pb-8">
+      {/* Top Banner: Modo Campo & Inspección de Obra */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm text-white">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -283,31 +208,36 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
                   Móvil / Tablet
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Checklist simplificado para registrar el avance físico acumulado desde el teléfono
+              <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                <span>Visualizador ágil de avance en terreno y registro de novedades de obra.</span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 font-medium">
+                  <ShieldCheck className="w-3 h-3" />
+                  La emisión oficial de certificados se gestiona exclusivamente desde Gerencia.
+                </span>
               </p>
             </div>
           </div>
 
-          {/* Selector de fecha de inspección y acciones */}
+          {/* Acciones del encabezado */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-slate-200">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[11px] text-slate-400 hidden sm:inline">Fecha inspección:</span>
-              <input
-                type="date"
-                value={fechaInspeccion}
-                onChange={(e) => setFechaInspeccion(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer"
-              />
-            </div>
+            {onNavigateToTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('certificaciones')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-xs transition"
+                title="Ir al módulo oficial de certificaciones de la empresa"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Certificaciones Oficiales</span>
+              </button>
+            )}
 
             {onSaveData && (
               <button
                 type="button"
                 onClick={onSaveData}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                title="Guardar cambios de la jornada en el dispositivo"
+                title="Guardar notas y cambios en el almacenamiento local del dispositivo"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Guardar</span>
@@ -320,78 +250,74 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
                 onClick={onSwitchToDesktopView}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition"
               >
-                <span>Vista Completa</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <span>Dashboard</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Global Inspection Progress Bar */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
-            <div className="text-[11px] text-slate-400">Avance Físico Global</div>
-            <div className="text-xl font-bold text-emerald-400 font-mono mt-0.5">
+        {/* Global Progress Bar in Field Header */}
+        <div className="mt-4 pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 uppercase font-semibold">Avance Oficial</span>
+            <div className="text-lg font-black text-emerald-400 mt-0.5">
               {stats.pctGlobal.toFixed(1)}%
             </div>
-            <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div 
-                className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, stats.pctGlobal)}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
-            <div className="text-[11px] text-slate-400">Tareas en Obra</div>
-            <div className="text-xl font-bold text-white font-mono mt-0.5">
-              {stats.totalItems}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-1">
-              {stats.completados} terminadas (100%)
-            </div>
-          </div>
-
-          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
-            <div className="text-[11px] text-slate-400">En Ejecución</div>
-            <div className="text-xl font-bold text-sky-400 font-mono mt-0.5">
-              {stats.enCurso}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-1">
-              {stats.sinIniciar} sin iniciar
-            </div>
-          </div>
-
-          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/60">
-            <div className="text-[11px] text-slate-400">Certificado Acumulado</div>
-            <div className="text-lg font-bold text-amber-400 font-mono mt-0.5 truncate">
+            <div className="text-[10px] text-slate-400 mt-0.5">
               {formatCurrency(stats.totalCertificado)}
             </div>
-            <div className="text-[10px] text-slate-500 mt-1 truncate">
-              de {formatCurrency(stats.totalContratado)}
+          </div>
+
+          <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 uppercase font-semibold">Total Contratado</span>
+            <div className="text-lg font-black text-white mt-0.5">
+              {formatCurrency(stats.totalContratado)}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              {stats.totalItems} ítems contractuales
+            </div>
+          </div>
+
+          <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 uppercase font-semibold">Estado de Tareas</span>
+            <div className="text-lg font-black text-sky-400 mt-0.5">
+              {stats.completados} <span className="text-xs font-normal text-slate-400">listos</span>
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              {stats.enCurso} en curso &bull; {stats.sinIniciar} pendientes
+            </div>
+          </div>
+
+          <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+            <span className="text-[10px] text-slate-400 uppercase font-semibold">Saldo por Certificar</span>
+            <div className="text-lg font-black text-amber-400 mt-0.5">
+              {formatCurrency(Math.max(0, stats.totalContratado - stats.totalCertificado))}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              A certificar por Gerencia
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filter Toolbar (Mobile Touch-Friendly) */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs space-y-3">
+      {/* Search and Filters Bar */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row gap-2.5">
-          {/* Search Box */}
+          {/* Search Input */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              placeholder="Buscar por código (ej: 1.01), descripción o rubro..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por código, rubro o descripción..."
-              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-8 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold"
               >
                 ✕
               </button>
@@ -467,7 +393,7 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
         </div>
       </div>
 
-      {/* Cards List: Mobile Vertical Checklist */}
+      {/* Cards List: Mobile Vertical Checklist optimizado para inspección */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {filteredItems.length === 0 ? (
           <div className="col-span-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center text-slate-500">
@@ -481,10 +407,23 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
           </div>
         ) : (
           filteredItems.map((item) => {
-            const { entregable, valorEfectivo, certTotal, saldoPendiente, pctAvance, estado, cantidadTotal, cantidadCertificada } = item;
-            const isEditing = activeEditingId === entregable.id;
-            const currentTempPct = tempPctInput[entregable.id] !== undefined ? tempPctInput[entregable.id] : Math.round(pctAvance);
+            const { 
+              entregable, 
+              valorEfectivo, 
+              certTotal, 
+              saldoPendiente, 
+              pctAvance, 
+              estado, 
+              cantidadTotal, 
+              cantidadCertificada, 
+              allCerts 
+            } = item;
+            
             const isSaved = savedFeedbackId === entregable.id;
+            const isCertExpanded = !!expandedCertHist[entregable.id];
+            const currentObservation = tempNotes[entregable.id] !== undefined 
+              ? tempNotes[entregable.id] 
+              : (entregable.observaciones || '');
 
             return (
               <div
@@ -521,13 +460,13 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
                       {estado === 'completado' && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>100% Listo</span>
+                          <span>100% Certificado</span>
                         </span>
                       )}
                       {estado === 'en_curso' && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
                           <Clock className="w-3.5 h-3.5" />
-                          <span>{pctAvance.toFixed(0)}% En curso</span>
+                          <span>{pctAvance.toFixed(1)}% Oficial</span>
                         </span>
                       )}
                       {estado === 'sin_iniciar' && (
@@ -545,24 +484,26 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
 
                   {/* Cómputo Metric Info if Available */}
                   {cantidadTotal > 0 && (
-                    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <span>Cómputo:</span>
-                      <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
-                        {cantidadCertificada.toFixed(1)} / {cantidadTotal.toLocaleString()} {entregable.unidad || 'un'}
-                      </span>
-                      {entregable.precioUnitario && (
-                        <span className="text-slate-400">
-                          (a {formatCurrency(entregable.precioUnitario)}/{entregable.unidad || 'un'})
+                    <div className="mt-2.5 p-2 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Cómputo en Obra:</span>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                          {cantidadCertificada.toFixed(1)} / {cantidadTotal.toLocaleString()} {entregable.unidad || 'un'}
                         </span>
-                      )}
+                        {entregable.precioUnitario && (
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {formatCurrency(entregable.precioUnitario)} / {entregable.unidad || 'un'}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
                   {/* Financial & Progress Values */}
                   <div className="mt-3 bg-slate-50 dark:bg-slate-950/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800/80">
                     <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="text-slate-500 dark:text-slate-400">Avance Físico Acumulado</span>
-                      <span className="font-bold font-mono text-slate-900 dark:text-white text-sm">
+                      <span className="text-slate-600 dark:text-slate-300 font-medium">Avance Oficial Emitido (Gerencia)</span>
+                      <span className="font-black font-mono text-slate-900 dark:text-white text-sm">
                         {pctAvance.toFixed(1)}%
                       </span>
                     </div>
@@ -580,17 +521,54 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
                       />
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
-                      <span>Certificado: <strong className="text-slate-700 dark:text-slate-200">{formatCurrency(certTotal)}</strong></span>
-                      <span>Total: <strong className="text-slate-700 dark:text-slate-200">{formatCurrency(valorEfectivo)}</strong></span>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                      <span>Certificado: <strong className="text-emerald-700 dark:text-emerald-300 font-mono font-bold">{formatCurrency(certTotal)}</strong></span>
+                      <span>Total: <strong className="text-slate-700 dark:text-slate-200 font-mono font-semibold">{formatCurrency(valorEfectivo)}</strong></span>
                     </div>
                   </div>
+
+                  {/* Certificados Oficiales Emitidos (Desplegable si existen) */}
+                  {allCerts.length > 0 && (
+                    <div className="mt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleHistorial(entregable.id)}
+                        className="w-full flex items-center justify-between text-[11px] text-blue-600 dark:text-blue-400 font-semibold py-1 hover:underline"
+                      >
+                        <span className="flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          <span>{allCerts.length} {allCerts.length === 1 ? 'Certificado Oficial Emitido' : 'Certificados Oficiales Emitidos'}</span>
+                        </span>
+                        {isCertExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      </button>
+
+                      {isCertExpanded && (
+                        <div className="mt-1.5 space-y-1.5 p-2 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-xl text-[11px]">
+                          {allCerts.map(({ hitoNombre, cert }, idx) => (
+                            <div key={cert.id || idx} className="flex items-center justify-between border-b border-blue-100/60 dark:border-blue-900/30 last:border-0 pb-1 last:pb-0">
+                              <div>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{cert.numero || cert.nombre}</span>
+                                <span className="text-[10px] text-slate-500 ml-1.5">({hitoNombre})</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-mono font-bold text-slate-900 dark:text-white">{formatCurrency(cert.importe)}</span>
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">{cert.estado || 'Aprobado'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {/* Quick Inspection Action Controls */}
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2.5">
-                  <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex items-center justify-between">
-                    <span>Registrar Avance en Campo:</span>
+                {/* Sección de Relevamiento / Bitácora de Campo (Sin botones de certificar) */}
+                <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Bitácora de Campo & Observaciones:</span>
+                    </span>
                     {isSaved && (
                       <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 animate-pulse">
                         <Check className="w-3.5 h-3.5" />
@@ -599,94 +577,31 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
                     )}
                   </div>
 
-                  {/* One-touch Increments: +5%, +10%, +25%, 100% */}
-                  <div className="grid grid-cols-4 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleQuickAddPct(entregable, pctAvance, 5)}
-                      disabled={pctAvance >= 100}
-                      className="py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg transition disabled:opacity-40"
-                    >
-                      +5%
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleQuickAddPct(entregable, pctAvance, 10)}
-                      disabled={pctAvance >= 100}
-                      className="py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg transition disabled:opacity-40"
-                    >
-                      +10%
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleQuickAddPct(entregable, pctAvance, 25)}
-                      disabled={pctAvance >= 100}
-                      className="py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-lg transition disabled:opacity-40"
-                    >
-                      +25%
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyAvance(entregable, 100)}
-                      className="py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition shadow-xs flex items-center justify-center gap-1"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>100%</span>
-                    </button>
-                  </div>
-
-                  {/* Manual Exact Input or Slider */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <div className="relative flex-1">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={currentTempPct}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          setTempPctInput((prev) => ({ ...prev, [entregable.id]: val }));
-                        }}
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 dark:text-white pr-7 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
-                        %
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyAvance(entregable, currentTempPct)}
-                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-xs transition"
-                    >
-                      Fijar %
-                    </button>
-                  </div>
-
-                  {/* Field Notes Input Toggle */}
-                  <div className="pt-1">
+                  <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      placeholder="Nota de campo / novedad de inspección..."
-                      value={tempNotes[entregable.id] || entregable.observaciones || ''}
+                      placeholder="Registrar estado relevado en obra, novedades técnicas o avance visible..."
+                      value={currentObservation}
                       onChange={(e) => {
                         const val = e.target.value;
                         setTempNotes((prev) => ({ ...prev, [entregable.id]: val }));
                       }}
-                      onBlur={() => {
-                        if (tempNotes[entregable.id] !== undefined && tempNotes[entregable.id] !== entregable.observaciones) {
-                          onUpdateEntregable({
-                            ...entregable,
-                            observaciones: tempNotes[entregable.id],
-                          });
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleSaveObservation(entregable);
                         }
                       }}
-                      className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300 rounded-lg px-2.5 py-1.5 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="flex-1 bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white rounded-xl px-3 py-2 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
+
+                    <button
+                      type="button"
+                      onClick={() => handleSaveObservation(entregable)}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-semibold rounded-xl shadow-xs transition shrink-0"
+                      title="Guardar nota de inspección para que la vea Gerencia"
+                    >
+                      Anotar
+                    </button>
                   </div>
                 </div>
               </div>
@@ -701,7 +616,7 @@ export const ModoCampoView: React.FC<ModoCampoViewProps> = ({
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
           <div className="text-xs">
             <span className="font-bold text-white">{stats.pctGlobal.toFixed(1)}%</span>
-            <span className="text-slate-400 text-[11px] ml-1">obra ({stats.completados}/{stats.totalItems})</span>
+            <span className="text-slate-400 text-[11px] ml-1">oficial ({stats.completados}/{stats.totalItems})</span>
           </div>
         </div>
 

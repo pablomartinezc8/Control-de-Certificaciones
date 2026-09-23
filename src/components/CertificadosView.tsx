@@ -87,6 +87,20 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
     });
   }, [docs, searchTerm, statusFilter]);
 
+  const allExpanded = filteredDocs.length > 0 && filteredDocs.every((doc) => Boolean(expandedDocs[doc.id]));
+
+  const toggleExpandAll = () => {
+    if (allExpanded) {
+      setExpandedDocs({});
+    } else {
+      const next: Record<string, boolean> = {};
+      filteredDocs.forEach((d) => {
+        next[d.id] = true;
+      });
+      setExpandedDocs(next);
+    }
+  };
+
   // Totals
   const totalEmitido = useMemo(() => {
     return docs.reduce((sum, d) => sum + d.importeTotal, 0);
@@ -249,6 +263,24 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span>Generar Reporte</span>
             </button>
+
+            <button
+              onClick={toggleExpandAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-700 transition-colors"
+              title={allExpanded ? "Ocultar detalles de todas las certificaciones" : "Ver qué se cobró en todas las certificaciones"}
+            >
+              {allExpanded ? (
+                <>
+                  <ChevronDown className="w-4 h-4 text-blue-600 dark:text-cyan-400" />
+                  <span>Colapsar Detalles</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="w-4 h-4 text-blue-600 dark:text-cyan-400" />
+                  <span>Ver Todos los Detalles</span>
+                </>
+              )}
+            </button>
           </div>
 
           <button
@@ -313,22 +345,21 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
 
                         {/* DESCRIPCIÓN */}
                         <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
-                          <div className="flex items-center gap-2">
-                            <span>{doc.nombre}</span>
-                            {doc.actividades.length > 1 && (
-                              <button
-                                onClick={() => toggleExpand(doc.id)}
-                                className="text-slate-400 hover:text-blue-600 transition-colors p-0.5"
-                                title="Ver actividades asociadas"
-                              >
-                                {isExpanded ? (
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                ) : (
-                                  <ChevronRight className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(doc.id)}
+                            className="flex items-center gap-1.5 text-left group hover:text-blue-600 dark:hover:text-cyan-400 transition-colors cursor-pointer"
+                            title={isExpanded ? "Ocultar detalle de lo cobrado" : "Ver detalle de lo cobrado"}
+                          >
+                            <span className="font-semibold">{doc.nombre}</span>
+                            <span className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors p-0.5 rounded">
+                              {isExpanded ? (
+                                <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+                              ) : (
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              )}
+                            </span>
+                          </button>
                         </td>
 
                         {/* TIPO */}
@@ -378,8 +409,12 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => toggleExpand(doc.id)}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
-                              title="Ver detalle de actividades"
+                              className={`p-1.5 rounded transition-colors ${
+                                isExpanded
+                                  ? 'text-blue-600 dark:text-cyan-400 bg-blue-100 dark:bg-blue-900/60'
+                                  : 'text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                              }`}
+                              title={isExpanded ? "Ocultar detalle de actividades" : "Ver detalle de lo cobrado"}
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
@@ -425,7 +460,11 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                           <td colSpan={10} className="p-4 pl-12">
                             <div className="space-y-2">
                               <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                                <span>Actividades Cobradas en este Certificado ({doc.actividades.length})</span>
+                                <span>
+                                  {doc.actividades.length === 1
+                                    ? 'Actividad Cobrada en este Certificado (1)'
+                                    : `Actividades Cobradas en este Certificado (${doc.actividades.length})`}
+                                </span>
                                 <span className="font-mono text-blue-600 dark:text-cyan-400 font-semibold">
                                   Total: {formatCurrency(doc.importeTotal)}
                                 </span>

@@ -38,12 +38,16 @@ interface DashboardViewProps {
   proyecto: Proyecto;
   onNavigateToTab: (tabId: string) => void;
   onOpenNewCert?: (entregableId?: string, hitoId?: string) => void;
+  selectedCutoffDateProp?: string;
+  onCutoffDateChange?: (date: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   proyecto,
   onNavigateToTab,
   onOpenNewCert,
+  selectedCutoffDateProp,
+  onCutoffDateChange,
 }) => {
   const dashboardCardRef = useRef<HTMLDivElement>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
@@ -62,11 +66,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const todayStr = '2026-09-16';
 
-  // Fecha de corte activa seleccionada en el dashboard
-  const [selectedCutoffDate, setSelectedCutoffDate] = useState<string>(() => {
+  const defaultActualDate = useMemo(() => {
     const past = todasLasFechasCorte.filter((d) => d <= todayStr);
     return past[past.length - 1] || todasLasFechasCorte[todasLasFechasCorte.length - 1] || todayStr;
+  }, [todasLasFechasCorte]);
+
+  // Fecha de corte activa seleccionada en el dashboard
+  const [internalCutoffDate, setInternalCutoffDate] = useState<string>(() => {
+    return selectedCutoffDateProp || defaultActualDate;
   });
+
+  const selectedCutoffDate = selectedCutoffDateProp || internalCutoffDate;
+
+  const handleDateChange = (newDate: string) => {
+    setInternalCutoffDate(newDate);
+    if (onCutoffDateChange) {
+      onCutoffDateChange(newDate);
+    }
+  };
 
   // Métricas sincronizadas asociadas a la fecha de corte elegida
   const metrics = useMemo(() => {
@@ -189,15 +206,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </span>
                 <select
                   value={selectedCutoffDate}
-                  onChange={(e) => setSelectedCutoffDate(e.target.value)}
+                  onChange={(e) => handleDateChange(e.target.value)}
                   className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-1"
                 >
                   {todasLasFechasCorte.map((f) => (
                     <option key={f} value={f}>
-                      {f} {f === todayStr ? '(Actual)' : ''}
+                      {f} {f === defaultActualDate ? '(Actual)' : ''}
                     </option>
                   ))}
                 </select>
+                {selectedCutoffDate !== defaultActualDate && (
+                  <button
+                    type="button"
+                    onClick={() => handleDateChange(defaultActualDate)}
+                    className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-semibold text-left"
+                    title={`Restablecer a la fecha de corte actual (${defaultActualDate})`}
+                  >
+                    Volver a actual
+                  </button>
+                )}
               </div>
             </div>
 
@@ -320,7 +347,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <CurvaSView 
           proyecto={proyecto} 
           selectedCutoffDateProp={selectedCutoffDate}
-          onCutoffDateChange={setSelectedCutoffDate}
+          onCutoffDateChange={handleDateChange}
           showDownloadButton={false}
         />
       </div>

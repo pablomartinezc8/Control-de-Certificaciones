@@ -174,6 +174,28 @@ export default function App() {
   // Active View Tab - matches Base44 tabs (default to Dashboard)
   const [activeTab, setActiveTab] = useState<ActiveTabType>('dashboard');
 
+  // Fechas de corte seleccionadas persistentes por proyecto
+  const [selectedCutoffDates, setSelectedCutoffDates] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('taging_selected_cutoff_dates');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const handleSetCutoffDate = (newDate: string) => {
+    setSelectedCutoffDates((prev) => {
+      const next = { ...prev, [currentProject.id]: newDate };
+      try {
+        localStorage.setItem('taging_selected_cutoff_dates', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const currentCutoffDate = selectedCutoffDates[currentProject.id];
+
   // Filtros state
   const [filtros, setFiltros] = useState<FiltrosState>(INITIAL_FILTROS);
 
@@ -962,6 +984,8 @@ export default function App() {
           {activeTab === 'dashboard' && (
             <DashboardView
               proyecto={currentProject}
+              selectedCutoffDateProp={currentCutoffDate}
+              onCutoffDateChange={handleSetCutoffDate}
               onNavigateToTab={(tab) => setActiveTab(tab as ActiveTabType)}
               onOpenNewCert={(entId, hitoId) => handleOpenNewCert(entId, hitoId)}
             />
@@ -971,11 +995,11 @@ export default function App() {
             <ModoCampoView
               proyecto={currentProject}
               onUpdateEntregable={handleSaveEntregable}
-              onSaveCertificado={handleSaveCertificado}
               onSaveData={() => {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
               }}
               onSwitchToDesktopView={() => setActiveTab('dashboard')}
+              onNavigateToTab={(tab) => setActiveTab(tab as ActiveTabType)}
             />
           )}
 
@@ -1014,7 +1038,11 @@ export default function App() {
           )}
 
           {activeTab === 'curva_s' && (
-            <CurvaSView proyecto={currentProject} />
+            <CurvaSView 
+              proyecto={currentProject} 
+              selectedCutoffDateProp={currentCutoffDate}
+              onCutoffDateChange={handleSetCutoffDate}
+            />
           )}
 
           {activeTab === 'alertas' && (
