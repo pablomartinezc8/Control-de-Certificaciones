@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Proyecto, GastoActividad } from '../types';
-import { normalizeDate, formatShortDate } from '../utils/calculations';
+import { 
+  normalizeDate, 
+  formatShortDate, 
+  formatCurrency,
+  getCorteActual,
+  getProximoCorte
+} from '../utils/calculations';
 import { 
   Calendar, 
   Plus, 
@@ -55,17 +61,33 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingValue, setEditingValue] = useState<string>('');
 
-  // Gastos editing
-  const gastoPrincipal = gastosList[0] || {
-    id: 'g_n9qiz3j',
-    nombre: 'Gastos generales',
-    monto: 0,
-    modo: 'igual',
-    pesos: {},
-  };
-  const [montoGasto, setMontoGasto] = useState<number>(gastoPrincipal.monto || 0);
+  // Generales del Proyecto itemized management
+  const [nuevoConcepto, setNuevoConcepto] = useState('');
+  const [nuevoMonto, setNuevoMonto] = useState<number | ''>('');
 
-  const today = '2026-09-16';
+  const totalGenerales = useMemo(() => {
+    return gastosList.reduce((sum, g) => sum + (Number(g.monto) || 0), 0);
+  }, [gastosList]);
+
+  const handleAddConcepto = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoConcepto.trim() || Number(nuevoMonto) <= 0) return;
+    const nuevoItem: GastoActividad = {
+      id: `g_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      nombre: nuevoConcepto.trim(),
+      monto: Number(nuevoMonto),
+      modo: 'igual',
+      pesos: {},
+    };
+    onUpdateGastosGenerales(activeEmpresa, [...gastosList, nuevoItem]);
+    setNuevoConcepto('');
+    setNuevoMonto('');
+  };
+
+  const handleDeleteConcepto = (id: string) => {
+    const updated = gastosList.filter((g) => g.id !== id);
+    onUpdateGastosGenerales(activeEmpresa, updated);
+  };
 
   const handleAddDate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,14 +149,14 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
     setShowAutoGenerator(false);
   };
 
-  const handleSaveGasto = (e: React.FormEvent) => {
-    e.preventDefault();
-    const updatedGasto: GastoActividad = {
-      ...gastoPrincipal,
-      monto: Number(montoGasto) || 0,
-    };
-    onUpdateGastosGenerales(activeEmpresa, [updatedGasto]);
-  };
+  const today = normalizeDate(new Date().toISOString().split('T')[0]);
+
+  const proximoCorte = useMemo(() => getProximoCorte(fechas, today), [fechas, today]);
+  const corteMasCercano = useMemo(() => getCorteActual(fechas, today), [fechas, today]);
+  const corteAnterior = useMemo(() => {
+    const past = fechas.filter((f) => f < today);
+    return past[past.length - 1];
+  }, [fechas, today]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -279,6 +301,37 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
           </div>
         </div>
 
+        {/* Status Strip: Hoy y Próximo Corte */}
+        {fechas.length > 0 && (
+          <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-blue-500" />
+              <span className="text-slate-500 dark:text-slate-400">Fecha de referencia (Hoy):</span>
+              <span className="font-semibold text-slate-800 dark:text-white font-mono">{formatShortDate(today)}</span>
+            </div>
+            {proximoCorte && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 dark:text-slate-400">Próximo corte contractual:</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">{formatShortDate(proximoCorte)}</span>
+                {(() => {
+                  const dDiff = Math.round((new Date(proximoCorte).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 font-medium">
+                      {dDiff === 0 ? 'Hoy' : dDiff === 1 ? 'Mañana' : `En ${dDiff} días`}
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+            {corteAnterior && (
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                <span>Corte anterior:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">{formatShortDate(corteAnterior)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Fechas Grid */}
         <div className="mt-5">
           <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-3">
@@ -302,7 +355,12 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
                 const isEditing = editingIndex === idx;
                 const isPast = fecha < today;
                 const isToday = fecha === today;
-                const isNext = !isPast && !isToday && (idx === 0 || fechas[idx - 1] < today);
+                const isNext = fecha === proximoCorte;
+                const isClosest = fecha === corteMasCercano;
+
+                const todayTime = new Date(today).getTime();
+                const fTime = new Date(fecha).getTime();
+                const diffDays = Math.round((fTime - todayTime) / (1000 * 60 * 60 * 24));
 
                 return (
                   <div
@@ -311,7 +369,9 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
                       isEditing
                         ? 'bg-blue-50/80 dark:bg-blue-950/50 border-blue-400 dark:border-blue-700 shadow-xs ring-2 ring-blue-500/20'
                         : isNext
-                        ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/60 shadow-xs'
+                        ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-300 dark:border-amber-700/80 shadow-xs ring-1 ring-amber-400/30'
+                        : isClosest
+                        ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-300 dark:border-blue-800/60 shadow-xs'
                         : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/70 hover:border-slate-300'
                     }`}
                   >
@@ -371,9 +431,23 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
 
                         {/* Status badge + Action buttons */}
                         <div className="flex items-center gap-1 shrink-0">
-                          {isNext && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-semibold uppercase tracking-wider">
-                              Próxima
+                          {isToday && (
+                            <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 font-bold uppercase tracking-wider border border-emerald-300 dark:border-emerald-700">
+                              Hoy
+                            </span>
+                          )}
+
+                          {isNext && !isToday && (
+                            <span className="text-[9px] px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 font-bold uppercase tracking-wider border border-amber-300 dark:border-amber-700/60 flex items-center gap-1 shadow-xs" title={`Corte contractual planificado en ${diffDays} días`}>
+                              <span>Próxima</span>
+                              <span className="text-[8px] font-normal opacity-85 font-mono">({diffDays === 1 ? 'mañana' : `en ${diffDays}d`})</span>
+                            </span>
+                          )}
+
+                          {isClosest && !isNext && !isToday && (
+                            <span className="text-[9px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-200 font-bold uppercase tracking-wider border border-blue-300 dark:border-blue-700/60 flex items-center gap-1 shadow-xs" title="Corte más cercano por fecha">
+                              <span>Más cercana</span>
+                              <span className="text-[8px] font-normal opacity-85 font-mono">({diffDays < 0 ? `hace ${Math.abs(diffDays)}d` : `en ${diffDays}d`})</span>
                             </span>
                           )}
 
@@ -407,51 +481,108 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
         </div>
       </div>
 
-      {/* Columna Derecha: Gastos Generales de Actividad */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
-          <DollarSign className="w-5 h-5 text-purple-500" />
-          <span>Gastos Generales</span>
-        </h3>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-4">
-          Presupuesto de gastos indirectos y generales que se distribuyen sobre la actividad del proyecto.
-        </p>
-
-        <form onSubmit={handleSaveGasto} className="space-y-4 text-xs">
-          <div>
-            <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">
-              Monto Total Presupuestado (USD)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={montoGasto}
-              onChange={(e) => setMontoGasto(parseFloat(e.target.value) || 0)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold text-base focus:ring-2 focus:ring-purple-500"
-            />
+      {/* Columna Derecha: Generales del Proyecto */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-purple-500" />
+              <span>Generales del Proyecto</span>
+            </h3>
+            <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
+              {gastosList.length} ítems
+            </span>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 mb-4">
+            Ítems de generales (gerenciamiento, utilidades, administración, etc.) que componen el total indirecto del proyecto.
+          </p>
 
-          <div>
-            <label className="block text-slate-600 dark:text-slate-300 font-semibold mb-1">
-              Modo de Reparto
-            </label>
-            <div className="p-2.5 bg-slate-50 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
-              <div className="font-semibold text-purple-600 dark:text-purple-400 capitalize">
-                {gastoPrincipal.modo || 'igual'}
+          {/* Form to add item */}
+          <form onSubmit={handleAddConcepto} className="p-3 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/70 dark:border-purple-800/50 rounded-xl mb-4 space-y-2.5">
+            <span className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" />
+              <span>Sumar Ítem a Generales</span>
+            </span>
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Ej. Gerenciamiento del proyecto"
+                value={nuevoConcepto}
+                onChange={(e) => setNuevoConcepto(e.target.value)}
+                className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Monto USD (Ej. 5000)"
+                  value={nuevoMonto}
+                  onChange={(e) => setNuevoMonto(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                  className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-xs transition-colors shadow-xs shrink-0"
+                >
+                  Sumar Ítem
+                </button>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Distribución ponderada entre los {Object.keys(gastoPrincipal.pesos || {}).length} hitos registrados.
-              </p>
+            </div>
+          </form>
+
+          {/* List of items */}
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {gastosList.length === 0 ? (
+              <div className="p-4 text-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
+                No hay ítems registrados en Generales del Proyecto. Agrega uno arriba (ej. Gerenciamiento, Utilidades, Administrativos).
+              </div>
+            ) : (
+              gastosList.map((gasto) => (
+                <div
+                  key={gasto.id}
+                  className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs hover:border-slate-300 transition-colors"
+                >
+                  <div className="min-w-0 pr-2">
+                    <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                      {gasto.nombre}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {totalGenerales > 0 ? ((gasto.monto / totalGenerales) * 100).toFixed(1) : 0}% del total
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono font-bold text-slate-900 dark:text-white">
+                      {formatCurrency(gasto.monto)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteConcepto(gasto.id)}
+                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded transition-colors"
+                      title="Eliminar este ítem"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Live Total Box */}
+        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
+          <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl">
+            <div className="text-[11px] font-bold text-purple-800 dark:text-purple-300 uppercase tracking-wider">
+              TOTAL GENERALES DEL PROYECTO
+            </div>
+            <div className="text-2xl font-bold text-purple-700 dark:text-purple-300 font-mono mt-0.5 tracking-tight">
+              {formatCurrency(totalGenerales)}
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              Suma de {gastosList.length} ítems presupuestados
             </div>
           </div>
-
-          <button
-            type="submit"
-            className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg transition-colors text-xs shadow-xs"
-          >
-            Actualizar Gastos Generales
-          </button>
-        </form>
+        </div>
       </div>
     </div>
   );

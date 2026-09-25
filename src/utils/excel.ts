@@ -385,7 +385,7 @@ export function parseExcelWithMapping(
       const p0 = pct0 !== undefined ? pct0 : 30;
       const pFin = pctFin !== undefined ? pctFin : 10;
 
-      const dateB = addDays(fechaBase, diasRevision);
+      const dateB = fechaBase;
       const date0 = addDays(dateB, intervaloCert);
       const dateFin = fechaFinProyecto;
 
@@ -395,7 +395,7 @@ export function parseExcelWithMapping(
           nombre: 'Emisión B',
           porcentaje: pB,
           reglaFecha: 'emision_b',
-          diasAdicionales: diasRevision,
+          diasAdicionales: 0,
           fechaManual: dateB,
           certificados: existing?.hitos?.[0]?.certificados || [],
         },

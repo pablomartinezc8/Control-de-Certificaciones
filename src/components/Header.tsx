@@ -12,8 +12,7 @@ import {
   Sparkles,
   Sun,
   Pencil,
-  FolderEdit,
-  ClipboardCheck
+  FolderEdit
 } from 'lucide-react';
 import { EmpresasModal } from './EmpresasModal';
 
@@ -182,24 +181,6 @@ export const Header: React.FC<HeaderProps> = ({
               <Plus className="w-3.5 h-3.5 text-slate-900" />
               <span>Nueva certificación</span>
             </button>
-
-            {/* Modo Campo / Inspección Button (Móvil / Tablet / Terreno) */}
-            {onSelectTab && (
-              <button
-                type="button"
-                onClick={() => onSelectTab(activeTab === 'modo_campo' ? 'dashboard' : 'modo_campo')}
-                id="btn-toggle-modo-campo"
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg shadow-xs transition-colors ${
-                  activeTab === 'modo_campo'
-                    ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black ring-2 ring-emerald-300'
-                    : 'bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500/50'
-                }`}
-                title={activeTab === 'modo_campo' ? 'Volver al tablero principal' : 'Abrir Modo Campo / Inspección optimizado para celulares y tablets'}
-              >
-                <ClipboardCheck className="w-3.5 h-3.5" />
-                <span>{activeTab === 'modo_campo' ? 'Salir de Campo' : 'Modo Campo 👷'}</span>
-              </button>
-            )}
 
             {/* Tema de página / Selector de Estilo */}
             <div className="relative">

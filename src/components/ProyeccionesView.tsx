@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Proyecto } from '../types';
 import { 
   computeProyecciones, 
   computeCurvaS, 
   getProyeccionCorteSummary, 
+  computeProjectMetrics,
   formatCurrency, 
   formatShortDate 
 } from '../utils/calculations';
@@ -14,7 +15,8 @@ import {
   BarChart3, 
   Clock, 
   CheckCircle2,
-  CalendarDays
+  CalendarDays,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -29,12 +31,22 @@ import {
 
 interface ProyeccionesViewProps {
   proyecto: Proyecto;
+  selectedCutoffDate?: string;
 }
 
-export const ProyeccionesView: React.FC<ProyeccionesViewProps> = ({ proyecto }) => {
-  const proyecciones = computeProyecciones(proyecto);
-  const curvaPuntos = computeCurvaS(proyecto);
-  const summary = getProyeccionCorteSummary(proyecto);
+export const ProyeccionesView: React.FC<ProyeccionesViewProps> = ({ 
+  proyecto,
+  selectedCutoffDate 
+}) => {
+  const metrics = useMemo(() => computeProjectMetrics(proyecto, selectedCutoffDate), [proyecto, selectedCutoffDate]);
+  const proyecciones = useMemo(() => computeProyecciones(proyecto), [proyecto]);
+  const curvaPuntos = useMemo(() => computeCurvaS(proyecto, selectedCutoffDate), [proyecto, selectedCutoffDate]);
+  const summary = useMemo(() => getProyeccionCorteSummary(proyecto, selectedCutoffDate || '2026-09-16'), [proyecto, selectedCutoffDate]);
+
+  // Exact Dashboard value
+  const saldoACertificarDashboard = metrics.saldoPendienteTaging;
+  const planificadoFuturo = Math.min(saldoACertificarDashboard, summary.totalPlanificadoRestante);
+  const pendienteAnterior = Math.max(0, Math.round((saldoACertificarDashboard - planificadoFuturo) * 100) / 100);
 
   // Chart data
   const chartData = curvaPuntos.map((c) => ({
@@ -105,19 +117,32 @@ export const ProyeccionesView: React.FC<ProyeccionesViewProps> = ({ proyecto }) 
           </div>
         </div>
 
-        {/* KPI 3: Total Planificado Restante */}
+        {/* KPI 3: Saldo Pendiente a Certificar (Total sincronizado con Dashboard) */}
         <div className="bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-4 shadow-xs">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-            <span>Restante a Certificar</span>
-            <div className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
+            <span>Saldo a Certificar</span>
+            <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            {formatCurrency(summary.totalPlanificadoRestante)}
+          <div className="mt-2 text-2xl font-bold text-amber-600 dark:text-amber-400 tracking-tight">
+            {formatCurrency(saldoACertificarDashboard)}
           </div>
-          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Flujo planificado en los siguientes cortes
+          <div className="mt-2 space-y-1 text-[11px] text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">En cortes futuros:</span>
+              <span className="font-semibold text-blue-600 dark:text-cyan-400">
+                {formatCurrency(planificadoFuturo)}
+              </span>
+            </div>
+            {pendienteAnterior > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Pendiente cortes anteriores:</span>
+                <span className="font-semibold text-amber-600 dark:text-amber-400">
+                  {formatCurrency(pendienteAnterior)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

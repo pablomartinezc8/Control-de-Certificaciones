@@ -48,7 +48,7 @@ export const ConciliacionView: React.FC<ConciliacionViewProps> = ({ proyecto }) 
       'Orden de Compra',
       'Presupuesto Contratado',
       'Monto Certificado',
-      'Monto Cobrado',
+      'Monto Facturado',
       'Saldo Pendiente',
       '% Avance',
       'Estado Conciliación'
@@ -95,9 +95,9 @@ export const ConciliacionView: React.FC<ConciliacionViewProps> = ({ proyecto }) 
         </div>
 
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs">
-          <div className="text-xs text-slate-500 font-medium">Total Cobrado Efectivo</div>
+          <div className="text-xs text-slate-500 font-medium">Total Facturado Efectivo</div>
           <div className="mt-2 text-2xl font-bold text-blue-600">{formatCurrency(totalCobrado)}</div>
-          <div className="mt-1 text-[11px] text-slate-400">Ingresos ingresados en banco</div>
+          <div className="mt-1 text-[11px] text-slate-400">Importe en estado facturado</div>
         </div>
 
         <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-xs">
@@ -156,7 +156,7 @@ export const ConciliacionView: React.FC<ConciliacionViewProps> = ({ proyecto }) 
                 <th className="py-2.5 px-3">Orden Compra</th>
                 <th className="py-2.5 px-3 text-right">Presupuesto</th>
                 <th className="py-2.5 px-3 text-right">Certificado</th>
-                <th className="py-2.5 px-3 text-right">Cobrado</th>
+                <th className="py-2.5 px-3 text-right">Facturado</th>
                 <th className="py-2.5 px-3 text-right">Saldo Pendiente</th>
                 <th className="py-2.5 px-3 text-center">% Avance</th>
                 <th className="py-2.5 px-4 text-center">Estado</th>

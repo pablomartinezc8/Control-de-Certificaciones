@@ -17,7 +17,8 @@ import {
   FileSpreadsheet,
   ChevronDown,
   ChevronRight,
-  Eye
+  Eye,
+  Receipt
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -79,8 +80,12 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
 
       if (!matchSearch) return false;
 
-      if (statusFilter !== 'all' && doc.estado !== statusFilter) {
-        return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'Facturado') {
+          if (doc.estado !== 'Facturado' && doc.estado !== 'Cobrado') return false;
+        } else if (doc.estado !== statusFilter) {
+          return false;
+        }
       }
 
       return true;
@@ -106,16 +111,16 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
     return docs.reduce((sum, d) => sum + d.importeTotal, 0);
   }, [docs]);
 
-  const totalCobrado = useMemo(() => {
+  const totalCertificado = useMemo(() => {
     return docs
-      .filter((d) => d.estado === 'Cobrado')
+      .filter((d) => d.estado === 'Cobrado' || d.estado === 'Facturado')
       .reduce((sum, d) => sum + d.importeTotal, 0);
   }, [docs]);
 
-  const totalPendiente = totalEmitido - totalCobrado;
+  const totalPendiente = totalEmitido - totalCertificado;
 
-  const cobradosCount = docs.filter((d) => d.estado === 'Cobrado').length;
-  const pendientesCount = docs.length - cobradosCount;
+  const facturadosCount = docs.filter((d) => d.estado === 'Cobrado' || d.estado === 'Facturado').length;
+  const pendientesCount = docs.length - facturadosCount;
 
   const exportCertificatesCSV = () => {
     const headers = [
@@ -194,27 +199,27 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
           </div>
         </div>
 
-        {/* TOTAL COBRADO */}
+        {/* TOTAL CERTIFICADO */}
         <div className="bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-              TOTAL COBRADO
+              TOTAL CERTIFICADO
             </span>
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
           </div>
           <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 tracking-tight">
-            {formatCurrency(totalCobrado)}
+            {formatCurrency(totalCertificado)}
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {cobradosCount} certificados cobrados
+            {facturadosCount} certificados facturados
           </div>
         </div>
 
-        {/* PENDIENTE DE COBRO */}
+        {/* PENDIENTE DE CERTIFICACIÓN */}
         <div className="bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-              PENDIENTE DE COBRO
+              PENDIENTE DE FACTURACIÓN
             </span>
             <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
           </div>
@@ -249,7 +254,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
               className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
             >
               <option value="all">Todos los estados</option>
-              <option value="Cobrado">Cobrado</option>
+              <option value="Facturado">Facturado</option>
               <option value="Aprobado">Aprobado</option>
               <option value="Presentado">Presentado</option>
               <option value="Pendiente">Pendiente</option>
@@ -267,7 +272,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
             <button
               onClick={toggleExpandAll}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs sm:text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-700 transition-colors"
-              title={allExpanded ? "Ocultar detalles de todas las certificaciones" : "Ver qué se cobró en todas las certificaciones"}
+              title={allExpanded ? "Ocultar detalles de todas las certificaciones" : "Ver actividades de todas las certificaciones"}
             >
               {allExpanded ? (
                 <>
@@ -306,7 +311,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                 <th className="py-3 px-3 text-center">ESTADO</th>
                 <th className="py-3 px-3 text-center">PRESENTACIÓN</th>
                 <th className="py-3 px-3 text-center">APROBACIÓN</th>
-                <th className="py-3 px-3 text-center">COBRO</th>
+                <th className="py-3 px-3 text-center">FACTURACIÓN</th>
                 <th className="py-3 px-3 text-center">ACCIONES</th>
               </tr>
             </thead>
@@ -343,23 +348,44 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                           </div>
                         </td>
 
-                        {/* DESCRIPCIÓN */}
+                        {/* DESCRIPCIÓN & BOTÓN VER DETALLE */}
                         <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(doc.id)}
-                            className="flex items-center gap-1.5 text-left group hover:text-blue-600 dark:hover:text-cyan-400 transition-colors cursor-pointer"
-                            title={isExpanded ? "Ocultar detalle de lo cobrado" : "Ver detalle de lo cobrado"}
-                          >
-                            <span className="font-semibold">{doc.nombre}</span>
-                            <span className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors p-0.5 rounded">
-                              {isExpanded ? (
-                                <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
-                              ) : (
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              )}
-                            </span>
-                          </button>
+                          <div className="flex flex-col gap-1">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(doc.id)}
+                              className="flex items-center gap-1.5 text-left group hover:text-blue-600 dark:hover:text-cyan-400 transition-colors cursor-pointer"
+                              title={isExpanded ? "Ocultar detalle de lo certificado" : "Ver detalle de lo certificado"}
+                            >
+                              <span className="font-semibold">{doc.nombre}</span>
+                              <span className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors p-0.5 rounded">
+                                {isExpanded ? (
+                                  <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+                                ) : (
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                )}
+                              </span>
+                            </button>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(doc.id)}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                                  isExpanded
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-cyan-200'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-700'
+                                }`}
+                                title="Ver detalles de los entregables e hitos certificados"
+                              >
+                                <Receipt className="w-2.5 h-2.5" />
+                                <span>
+                                  {doc.actividades.length === 1
+                                    ? '1 actividad • Ver desglose'
+                                    : `${doc.actividades.length} actividades • Ver desglose`}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
                         </td>
 
                         {/* TIPO */}
@@ -378,14 +404,14 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                              doc.estado === 'Cobrado'
+                              doc.estado === 'Cobrado' || doc.estado === 'Facturado'
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
                                 : doc.estado === 'Aprobado'
                                 ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-800'
                                 : 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
                             }`}
                           >
-                            {doc.estado}
+                            {doc.estado === 'Cobrado' ? 'Facturado' : doc.estado}
                           </span>
                         </td>
 
@@ -399,7 +425,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                           {formatShortDate(doc.fechaAprobacion) || formatShortDate(doc.fechaPresentacion) || '—'}
                         </td>
 
-                        {/* COBRO */}
+                        {/* FACTURACIÓN */}
                         <td className="py-3 px-3 text-center whitespace-nowrap text-slate-600 dark:text-slate-300 font-mono text-xs font-semibold">
                           {formatShortDate(doc.fechaCobro) || '—'}
                         </td>
@@ -414,7 +440,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                                   ? 'text-blue-600 dark:text-cyan-400 bg-blue-100 dark:bg-blue-900/60'
                                   : 'text-slate-400 hover:text-blue-600 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                               }`}
-                              title={isExpanded ? "Ocultar detalle de actividades" : "Ver detalle de lo cobrado"}
+                              title={isExpanded ? "Ocultar detalle de actividades" : "Ver detalle de lo certificado"}
                             >
                               <Eye className="w-3.5 h-3.5" />
                             </button>
@@ -454,30 +480,33 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                         </td>
                       </tr>
 
-                      {/* Expandable sub-row with activities */}
+                      {/* Expandable sub-row with activities - available for all certificates */}
                       {isExpanded && (
                         <tr className="bg-slate-50/90 dark:bg-slate-900/90 border-y border-slate-200 dark:border-slate-800">
-                          <td colSpan={10} className="p-4 pl-12">
+                          <td colSpan={10} className="p-4 pl-8 sm:pl-12">
                             <div className="space-y-2">
-                              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                                <span>
-                                  {doc.actividades.length === 1
-                                    ? 'Actividad Cobrada en este Certificado (1)'
-                                    : `Actividades Cobradas en este Certificado (${doc.actividades.length})`}
+                              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex flex-wrap items-center justify-between gap-2">
+                                <span className="flex items-center gap-1.5">
+                                  <Receipt className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+                                  <span>
+                                    {doc.actividades.length === 1
+                                      ? 'Detalle de la Actividad Certificada (1)'
+                                      : `Detalle de las Actividades Certificadas (${doc.actividades.length})`}
+                                  </span>
                                 </span>
                                 <span className="font-mono text-blue-600 dark:text-cyan-400 font-semibold">
-                                  Total: {formatCurrency(doc.importeTotal)}
+                                  Total Certificado: {formatCurrency(doc.importeTotal)}
                                 </span>
                               </div>
-                              <div className="bg-white dark:bg-[#0B1426] border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+                              <div className="bg-white dark:bg-[#0B1426] border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs">
                                 <table className="w-full text-left text-xs">
                                   <thead className="bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-semibold text-[11px]">
                                     <tr>
                                       <th className="py-2 px-3">Código</th>
                                       <th className="py-2 px-3">Descripción Entregable</th>
                                       <th className="py-2 px-3">Hito / Etapa</th>
-                                      <th className="py-2 px-3 text-right">Valor Efectivo</th>
-                                      <th className="py-2 px-3 text-right">Importe en este Certificado</th>
+                                      <th className="py-2 px-3 text-right">Valor Contractual Hito</th>
+                                      <th className="py-2 px-3 text-right font-bold text-blue-700 dark:text-cyan-300">Importe Facturado / Certificado</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
@@ -490,12 +519,13 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                                           {act.descripcion}
                                         </td>
                                         <td className="py-2 px-3 text-slate-600 dark:text-slate-400">
-                                          {act.hitoNombre} ({act.hitoPorcentaje}%)
+                                          <span className="font-medium text-slate-800 dark:text-slate-200">{act.hitoNombre}</span>{' '}
+                                          <span className="text-slate-500">({act.hitoPorcentaje}%)</span>
                                         </td>
                                         <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-400">
                                           {formatCurrency(act.valorHito)}
                                         </td>
-                                        <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">
                                           {formatCurrency(act.importe ?? (act.cobrado || act.pendiente))}
                                         </td>
                                       </tr>

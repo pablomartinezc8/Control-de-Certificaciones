@@ -93,13 +93,12 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
 
     const isPagoUnico = formData.tipoDistribucion === 'pago_unico';
     const fBase = formData.fechaBase || '';
-    const dRev = Number(formData.diasRevision) || 0;
     const dInt = Number(formData.intervaloCert) || 15;
     const fFin = formData.fechaFinProyecto || '2026-12-31';
 
-    // Calculate dates
-    const dateEmisionB = addDays(fBase, dRev);
-    const dateEmision0 = addDays(dateEmisionB, dInt);
+    // Calculate dates: la fecha de primera certificación ya contempla el tiempo de revisión
+    const dateEmisionB = fBase;
+    const dateEmision0 = fBase ? addDays(fBase, dInt) : '';
     const dateRestante = fFin;
 
     let updatedHitos: Hito[] = [];
@@ -127,7 +126,7 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
           nombre: 'Emisión B',
           porcentaje: pctB,
           reglaFecha: 'emision_b',
-          diasAdicionales: dRev,
+          diasAdicionales: 0,
           fechaManual: dateEmisionB,
           certificados: initialEntregable?.hitos?.[0]?.certificados || [],
         },
@@ -166,7 +165,7 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
       tipoDistribucion: formData.tipoDistribucion || 'estandar',
       porcentajes: formData.porcentajes || { emisionB: 60, emision0: 30, restante: 10 },
       intervaloCert: dInt,
-      diasRevision: dRev,
+      diasRevision: 0,
       fechaFinProyecto: fFin,
       hitos: updatedHitos,
       incluirCurva: formData.incluirCurva ?? true,
@@ -348,11 +347,13 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
             </div>
           </div>
 
-          {/* Fila 4: Fecha base / entrega & Tipo de distribución */}
+          {/* Fila 4: Fecha 1ª Certificación / Pago único & Tipo de distribución */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Fecha base / entrega
+                {formData.tipoDistribucion === 'pago_unico'
+                  ? 'Fecha de Certificación (Pago único 100%)'
+                  : 'Fecha 1ª Certificación (Emisión B)'}
               </label>
               <div className="relative">
                 <input
@@ -363,6 +364,11 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
                   className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
                 />
               </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                {formData.tipoDistribucion === 'pago_unico'
+                  ? 'Fecha prevista para la certificación única del 100%'
+                  : 'Fecha establecida para certificar Emisión B (ya contempla tiempos de revisión)'}
+              </p>
             </div>
 
             <div>
@@ -495,44 +501,62 @@ export const EntregableModal: React.FC<EntregableModalProps> = ({
             </div>
           )}
 
-          {/* Fila 8: Días de revisión, Intervalo, Fecha fin proyecto */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Días de revisión (doc. → cobro)
-              </label>
-              <input
-                type="number"
-                value={formData.diasRevision}
-                onChange={(e) => setFormData({ ...formData, diasRevision: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
-              />
-            </div>
+          {/* Fila 8: Días para próxima certificación (Emisión 0) y Fecha fin restante */}
+          {formData.tipoDistribucion !== 'pago_unico' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                    Días para próxima cert. (Emisión 0)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.intervaloCert}
+                    onChange={(e) => setFormData({ ...formData, intervaloCert: parseInt(e.target.value) || 0 })}
+                    placeholder="15"
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
+                  />
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                    Días posteriores a la Emisión B para certificar Emisión 0
+                  </p>
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Intervalo entre cert. (días)
-              </label>
-              <input
-                type="number"
-                value={formData.intervaloCert}
-                onChange={(e) => setFormData({ ...formData, intervaloCert: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                    Fecha final restante (Cierre)
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.fechaFinProyecto}
+                    onChange={(e) => setFormData({ ...formData, fechaFinProyecto: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
+                  />
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                    Fecha prevista para certificar el porcentaje restante final
+                  </p>
+                </div>
+              </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Fecha fin proyecto (Restante)
-              </label>
-              <input
-                type="date"
-                value={formData.fechaFinProyecto}
-                onChange={(e) => setFormData({ ...formData, fechaFinProyecto: e.target.value })}
-                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
-              />
+              {/* Vista previa de fechas programadas */}
+              {formData.fechaBase && (
+                <div className="p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 rounded-lg flex flex-wrap items-center gap-4 text-xs text-blue-900 dark:text-blue-200">
+                  <span className="font-semibold text-blue-700 dark:text-blue-300">Plan de Certificación:</span>
+                  <div>
+                    <span className="font-medium text-slate-600 dark:text-slate-400">Emisión B ({formData.porcentajes?.emisionB ?? 60}%):</span>{' '}
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">{formData.fechaBase}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-600 dark:text-slate-400">Emisión 0 ({formData.porcentajes?.emision0 ?? 30}%):</span>{' '}
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">{addDays(formData.fechaBase, Number(formData.intervaloCert) || 15)}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-600 dark:text-slate-400">Restante ({formData.porcentajes?.restante ?? 10}%):</span>{' '}
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">{formData.fechaFinProyecto || '2026-12-31'}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* Fila 9: Observaciones */}
           <div>

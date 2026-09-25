@@ -6,7 +6,8 @@ import {
   normalizeDate, 
   getEntregableValorEfectivo, 
   getHitoValorEfectivo, 
-  getHitoPlannedDate 
+  getHitoPlannedDate,
+  getTodayString 
 } from '../utils/calculations';
 import {
   Plus,
@@ -123,9 +124,10 @@ export const EntregablesView: React.FC<EntregablesViewProps> = ({
         if (filtros.completamenteCertificados && (certTotal < valorEfectivo - 5 || certTotal === 0)) return false;
 
         if (filtros.vencidos) {
+          const today = getTodayString();
           const hasOverdue = e.hitos.some((h) => {
             const f = getHitoPlannedDate(e, h);
-            return f && f < '2026-09-16' && h.certificados.length === 0;
+            return f && f < today && h.certificados.length === 0;
           });
           if (!hasOverdue) return false;
         }

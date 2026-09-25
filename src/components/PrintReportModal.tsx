@@ -4,6 +4,7 @@ import {
   ProyectoMetrics, 
   CurvaPunto, 
   formatCurrency, 
+  formatShortDate,
   computeCurvaS 
 } from '../utils/calculations';
 import { 
@@ -762,21 +763,21 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                   <div className="flex items-center justify-between border-b border-rose-200 pb-1 mb-1.5">
                     <h5 className="text-[10.5px] font-bold uppercase tracking-wider text-rose-900 flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                      <span>Hitos Vencidos ({vencidos.length})</span>
+                      <span>Actividades Atrasadas ({vencidos.length})</span>
                     </h5>
-                    <span className="text-[9px] font-semibold text-rose-700">Pendientes</span>
+                    <span className="text-[9px] font-semibold text-rose-700">Rezagadas</span>
                   </div>
 
                   {vencidos.length === 0 ? (
                     <div className="text-[10px] text-slate-500 py-3 text-center">
-                      No se registran hitos vencidos al corte.
+                      No se registran actividades atrasadas al corte.
                     </div>
                   ) : (
                     <table className="w-full text-[9px] border-collapse">
                       <thead>
                         <tr className="bg-rose-100/60 text-rose-900 font-bold uppercase text-[8.5px]">
                           <th className="py-1 px-1.5 text-left">Código / Hito</th>
-                          <th className="py-1 px-1 text-center">Fecha</th>
+                          <th className="py-1 px-1 text-center">Corte</th>
                           <th className="py-1 px-1.5 text-right">Saldo</th>
                           <th className="py-1 px-1 text-center">Atraso</th>
                         </tr>
@@ -788,7 +789,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
                               <strong className="text-slate-900">{v.entregableCodigo}</strong> {v.hitoNombre}
                             </td>
                             <td className="py-1 px-1 text-center font-mono text-slate-600 whitespace-nowrap">
-                              {v.fechaPrevista}
+                              {formatShortDate(v.fechaCorteObjetivo || v.fechaPrevista)}
                             </td>
                             <td className="py-1 px-1.5 text-right font-mono font-bold text-rose-700 whitespace-nowrap">
                               {formatCurrency(v.saldoPendiente)}

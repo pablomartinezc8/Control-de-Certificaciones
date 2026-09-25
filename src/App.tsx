@@ -32,7 +32,6 @@ import { FechasCorteView } from './components/FechasCorteView';
 import { GastosView } from './components/GastosView';
 import { ImportarExportarView } from './components/ImportarExportarView';
 import { AyudaView } from './components/AyudaView';
-import { ModoCampoView } from './components/ModoCampoView';
 
 // Modals
 import { EntregableModal } from './components/EntregableModal';
@@ -52,8 +51,7 @@ import {
   CalendarDays, 
   DollarSign, 
   FileCode, 
-  HelpCircle,
-  ClipboardCheck
+  HelpCircle
 } from 'lucide-react';
 
 const STORAGE_KEY = 'base44_engineering_project_data';
@@ -73,7 +71,6 @@ const INITIAL_FILTROS: FiltrosState = {
 
 type ActiveTabType = 
   | 'dashboard'
-  | 'modo_campo'
   | 'taging'
   | 'proyecciones'
   | 'curva_s'
@@ -178,7 +175,8 @@ export default function App() {
   const [selectedCutoffDates, setSelectedCutoffDates] = useState<Record<string, string>>(() => {
     try {
       const saved = localStorage.getItem('taging_selected_cutoff_dates');
-      return saved ? JSON.parse(saved) : {};
+      const parsed = saved ? JSON.parse(saved) : {};
+      return parsed;
     } catch {
       return {};
     }
@@ -189,12 +187,19 @@ export default function App() {
       const next = { ...prev, [currentProject.id]: newDate };
       try {
         localStorage.setItem('taging_selected_cutoff_dates', JSON.stringify(next));
+        localStorage.setItem(`curva_cutoff_${currentProject.id}`, newDate);
       } catch {}
       return next;
     });
   };
 
-  const currentCutoffDate = selectedCutoffDates[currentProject.id];
+  const currentCutoffDate = selectedCutoffDates[currentProject.id] || (() => {
+    try {
+      return localStorage.getItem(`curva_cutoff_${currentProject.id}`) || undefined;
+    } catch {
+      return undefined;
+    }
+  })();
 
   // Filtros state
   const [filtros, setFiltros] = useState<FiltrosState>(INITIAL_FILTROS);
@@ -822,19 +827,6 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setActiveTab('modo_campo')}
-              id="tab-modo-campo"
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-bold text-xs transition-colors ${
-                activeTab === 'modo_campo'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800'
-              }`}
-            >
-              <ClipboardCheck className="w-3.5 h-3.5" />
-              <span>Modo Campo 👷</span>
-            </button>
-
-            <button
               onClick={() => setActiveTab('taging')}
               id="tab-taging"
               className={`flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors ${
@@ -948,7 +940,7 @@ export default function App() {
               }`}
             >
               <DollarSign className="w-3.5 h-3.5" />
-              <span>Gastos</span>
+              <span>Generales del Proyecto</span>
             </button>
 
             <button
@@ -991,18 +983,6 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'modo_campo' && (
-            <ModoCampoView
-              proyecto={currentProject}
-              onUpdateEntregable={handleSaveEntregable}
-              onSaveData={() => {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
-              }}
-              onSwitchToDesktopView={() => setActiveTab('dashboard')}
-              onNavigateToTab={(tab) => setActiveTab(tab as ActiveTabType)}
-            />
-          )}
-
           {activeTab === 'taging' && (
             <div className="space-y-4">
               <FiltrosSection
@@ -1034,7 +1014,10 @@ export default function App() {
           )}
 
           {activeTab === 'proyecciones' && (
-            <ProyeccionesView proyecto={currentProject} />
+            <ProyeccionesView 
+              proyecto={currentProject} 
+              selectedCutoffDate={currentCutoffDate}
+            />
           )}
 
           {activeTab === 'curva_s' && (

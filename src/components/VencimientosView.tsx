@@ -50,11 +50,11 @@ export const VencimientosView: React.FC<VencimientosViewProps> = ({
           }`}
         >
           <div className="flex items-center justify-between text-xs text-rose-600 font-medium">
-            <span>Vencidos</span>
+            <span>Atrasados / Vencidos</span>
             <AlertCircle className="w-4 h-4 text-rose-500" />
           </div>
           <div className="mt-2 text-2xl font-bold text-rose-600">{countVencidos}</div>
-          <div className="mt-1 text-[11px] text-slate-400">Sin cobrar con fecha pasada</div>
+          <div className="mt-1 text-[11px] text-slate-400">Cortes cerrados o saltados sin certificar</div>
         </div>
 
         <div
@@ -154,7 +154,7 @@ export const VencimientosView: React.FC<VencimientosViewProps> = ({
                           : 'bg-emerald-50 text-emerald-700'
                       }`}>
                         {item.tipo === 'hito' 
-                          ? (item.diasRestantes < 0 ? 'Vencido sin cobrar' : 'Hito de entrega') 
+                          ? (item.diasRestantes < 0 ? 'Atrasado sin certificar' : 'Hito de entrega') 
                           : (item.diasRestantes < 0 ? 'Cobro atrasado' : 'Cobro Certificado')}
                       </span>
                     </div>
@@ -180,9 +180,9 @@ export const VencimientosView: React.FC<VencimientosViewProps> = ({
                     item.diasRestantes <= 15 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
                   }`}>
                     {item.diasRestantes < 0 
-                      ? `Vencido hace ${Math.abs(item.diasRestantes)} días` 
+                      ? `${Math.abs(item.diasRestantes)} días de atraso` 
                       : item.diasRestantes === 0 
-                      ? 'Vence hoy' 
+                      ? 'En este corte' 
                       : `En ${item.diasRestantes} días`}
                   </span>
 

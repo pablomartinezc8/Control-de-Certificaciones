@@ -1,6 +1,6 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Proyecto } from '../types';
-import { computeCurvaS, formatCurrency, formatShortDate, normalizeDate } from '../utils/calculations';
+import { computeCurvaS, formatCurrency, formatShortDate, normalizeDate, getCorteActual } from '../utils/calculations';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -57,24 +57,34 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
     return Array.from(new Set(list.map(normalizeDate).filter(Boolean))).sort();
   }, [proyecto]);
 
-  const todayStr = '2026-09-16';
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const defaultActualDate = useMemo(() => {
-    const past = todasLasFechasCorte.filter((d) => d <= todayStr);
-    return past[past.length - 1] || todasLasFechasCorte[todasLasFechasCorte.length - 1] || todayStr;
-  }, [todasLasFechasCorte]);
+    return getCorteActual(todasLasFechasCorte, todayStr) || todayStr;
+  }, [todasLasFechasCorte, todayStr]);
 
-  // Fecha de corte seleccionada local si no viene por prop
+  // Fecha de corte seleccionada: se preserva la elección manual del usuario hasta que decida volver a la actual
   const [internalCutoffDate, setInternalCutoffDate] = useState<string>(() => {
-    if (selectedCutoffDateProp) return selectedCutoffDateProp;
     try {
       const saved = localStorage.getItem(`curva_cutoff_${proyecto.id}`);
       if (saved && todasLasFechasCorte.includes(saved)) return saved;
     } catch {}
+    if (selectedCutoffDateProp && todasLasFechasCorte.includes(selectedCutoffDateProp)) {
+      return selectedCutoffDateProp;
+    }
     return defaultActualDate;
   });
 
-  const activeCutoffDate = selectedCutoffDateProp || internalCutoffDate;
+  useEffect(() => {
+    if (selectedCutoffDateProp && todasLasFechasCorte.includes(selectedCutoffDateProp) && selectedCutoffDateProp !== internalCutoffDate) {
+      setInternalCutoffDate(selectedCutoffDateProp);
+      try {
+        localStorage.setItem(`curva_cutoff_${proyecto.id}`, selectedCutoffDateProp);
+      } catch {}
+    }
+  }, [selectedCutoffDateProp, proyecto.id, todasLasFechasCorte]);
+
+  const activeCutoffDate = internalCutoffDate;
 
   const handleSelectDate = (date: string) => {
     setInternalCutoffDate(date);
@@ -211,7 +221,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
             <div className="flex items-center justify-between text-purple-300">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
-                Cobrado:
+                Facturado:
               </span>
               <span className="font-semibold font-mono">
                 {viewMode === 'porcentaje'
@@ -474,12 +484,12 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                   />
                 </Line>
 
-                {/* Línea Cobrado: Púrpura punteado que también corta en la fecha seleccionada */}
+                {/* Línea Facturado: Púrpura punteado que también corta en la fecha seleccionada */}
                 <Line
                   type="monotone"
                   connectNulls={false}
                   dataKey={viewMode === 'porcentaje' ? 'porcentajeCobradoAcumulado' : 'cobradoAcumulado'}
-                  name="Cobrado"
+                  name="Facturado"
                   stroke="#8B5CF6"
                   strokeWidth={2}
                   strokeDasharray="4 4"
@@ -499,7 +509,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
               Datos Numéricos por Fecha de Corte
             </h4>
             <p className="text-xs text-slate-500">
-              Valores planificados versus valores reales certificados y cobrados en cada período.
+              Valores planificados versus valores reales certificados y facturados en cada período.
             </p>
           </div>
           <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
@@ -518,7 +528,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                 <th className="py-2.5 px-3 text-right text-emerald-700">Real Período</th>
                 <th className="py-2.5 px-3 text-right text-emerald-700">Real Acum.</th>
                 <th className="py-2.5 px-3 text-right text-emerald-700">% Real</th>
-                <th className="py-2.5 px-3 text-right text-purple-700">Cobrado Acum.</th>
+                <th className="py-2.5 px-3 text-right text-purple-700">Facturado Acum.</th>
                 <th className="py-2.5 px-3 text-center">Estado</th>
               </tr>
             </thead>

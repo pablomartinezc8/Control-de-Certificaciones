@@ -51,6 +51,46 @@ export function addDays(dateStr: string, days: number): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+export function getTodayString(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
+ * Obtiene la fecha de corte contractual más cercana a la fecha de referencia (por defecto hoy).
+ * Encuentra el corte con menor distancia absoluta en días a hoy.
+ */
+export function getCorteActual(fechasCorte: string[], refDate?: string): string {
+  if (!fechasCorte || fechasCorte.length === 0) return '';
+  const ref = refDate ? normalizeDate(refDate) : getTodayString();
+  const sorted = Array.from(new Set(fechasCorte.map(normalizeDate).filter(Boolean))).sort();
+  if (sorted.length === 0) return '';
+
+  const refTime = new Date(ref).getTime();
+
+  let closest = sorted[0];
+  let minDiff = Math.abs(new Date(sorted[0]).getTime() - refTime);
+
+  for (const f of sorted) {
+    const diff = Math.abs(new Date(f).getTime() - refTime);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = f;
+    }
+  }
+
+  return closest;
+}
+
+/**
+ * Obtiene el próximo corte contractual pendiente (primer corte >= fecha de referencia).
+ */
+export function getProximoCorte(fechasCorte: string[], refDate?: string): string | undefined {
+  if (!fechasCorte || fechasCorte.length === 0) return undefined;
+  const ref = refDate ? normalizeDate(refDate) : getTodayString();
+  const sorted = Array.from(new Set(fechasCorte.map(normalizeDate).filter(Boolean))).sort();
+  return sorted.find((f) => f >= ref);
+}
+
 export function getTotalGastosGenerales(proyecto: Proyecto | undefined): number {
   if (!proyecto) return 0;
   let total = 0;
@@ -92,33 +132,33 @@ export function getHitoValorEfectivo(entregable: Entregable, hito: Hito, proyect
 }
 
 export function getHitoPlannedDate(entregable: Entregable, hito: Hito): string {
-  if (hito.fechaManual) return normalizeDate(hito.fechaManual);
   const fBase = normalizeDate(entregable.fechaBase);
-  if (!fBase) return '';
+  if (!fBase) {
+    return hito.fechaManual ? normalizeDate(hito.fechaManual) : '';
+  }
 
+  // Pago único: se devenga en la fecha establecida
   if (hito.reglaFecha === 'pago_unico' || entregable.tipoDistribucion === 'pago_unico') {
     return fBase;
   }
 
-  // Emisión B = fechaBase + diasRevision
-  const dRev = Number(entregable.diasRevision) || 0;
-  const d1 = addDays(fBase, dRev);
-
+  // Emisión B (1ª Certificación): la fecha ya contempla los tiempos de revisión (no se suman días adicionales)
   if (hito.reglaFecha === 'emision_b') {
-    return d1;
+    return fBase;
   }
 
-  // Emisión 0 = d1 + intervaloCert
+  // Emisión 0: se programa a los días estipulados posteriores a la Emisión B (intervaloCert)
   if (hito.reglaFecha === 'emision_0') {
     const dInt = Number(entregable.intervaloCert) || 15;
-    return addDays(d1, dInt);
+    return addDays(fBase, dInt);
   }
 
-  // Cierre = fechaFinProyecto || '2026-12-31'
+  // Cierre / Restante: fecha fin de proyecto o fecha manual final
   if (hito.reglaFecha === 'cierre') {
-    return normalizeDate(entregable.fechaFinProyecto) || '2026-12-31';
+    return normalizeDate(entregable.fechaFinProyecto) || (hito.fechaManual ? normalizeDate(hito.fechaManual) : '2026-12-31');
   }
 
+  if (hito.fechaManual) return normalizeDate(hito.fechaManual);
   return fBase;
 }
 
@@ -238,7 +278,7 @@ export function computeProjectMetrics(
           certsOnEntregable += importe;
         }
 
-        if (c.estado === 'Cobrado' && (!fechaCorteSeleccionada || fCobro <= fechaCorteSeleccionada)) {
+        if ((c.estado === 'Cobrado' || c.estado === 'Facturado') && (!fechaCorteSeleccionada || fCobro <= fechaCorteSeleccionada)) {
           totalCobrado += importe;
         }
       });
@@ -308,7 +348,14 @@ export function computeProjectMetrics(
   const porcentajeCobrado = totalContratado > 0 ? (totalCobrado / totalContratado) * 100 : 0;
 
   // Curva S y puntos de control sincronizados
-  const curCutoff = fechaCorteSeleccionada || '2026-09-16';
+  const allCortesTmp: string[] = [];
+  if (proyecto.fechasCorte) {
+    Object.values(proyecto.fechasCorte).forEach((list) => {
+      if (Array.isArray(list)) allCortesTmp.push(...list);
+    });
+  }
+  const cortesTmp = Array.from(new Set(allCortesTmp.map(normalizeDate).filter(Boolean))).sort();
+  const curCutoff = fechaCorteSeleccionada || getCorteActual(cortesTmp) || getTodayString();
   const puntosCurva = computeCurvaS(proyecto, curCutoff);
   const puntoAlCorte = puntosCurva.find((p) => p.fecha === curCutoff) 
     || puntosCurva.filter((p) => p.fecha <= curCutoff).slice(-1)[0]
@@ -439,7 +486,7 @@ export function computeCurvaS(
   if (cortes.length === 0) return [];
 
   // Cutoff reference limit (either user-selected date or project actual)
-  const limitDate = cutoffLimitDate || '2026-09-16';
+  const limitDate = cutoffLimitDate || getCorteActual(cortes) || getTodayString();
 
   // Calculate planned value per milestone
   interface PlanItem {
@@ -525,7 +572,7 @@ export function computeCurvaS(
         .reduce((sum, c) => sum + c.importe, 0);
 
       const cobradoSlice = certItems
-        .filter((c) => c.estado === 'Cobrado' && c.fechaCobro > fechaAnterior && c.fechaCobro <= fechaActual)
+        .filter((c) => (c.estado === 'Cobrado' || c.estado === 'Facturado') && c.fechaCobro > fechaAnterior && c.fechaCobro <= fechaActual)
         .reduce((sum, c) => sum + c.importe, 0);
 
       certAcum += certSlice;
@@ -592,18 +639,26 @@ export interface VencimientoHito {
   empresaNombre: string;
   hitoNombre: string;
   fechaPrevista: string;
+  fechaCorteObjetivo: string;
   montoHito: number;
   montoCertificado: number;
   saldoPendiente: number;
-  diasDiferencia: number; // positive = days until due, negative = days overdue
+  diasDiferencia: number; // positive = days until target cutoff, negative = days overdue
   esVencido: boolean;
+  esAtrasado: boolean;
+  motivoAtraso?: string;
   entregableId: string;
   hitoId: string;
   estado: string;
 }
 
 /**
- * Calcula tablas de próximos vencimientos y vencidos para la carátula / dashboard
+ * Calcula tablas de actividades atrasadas y próximas planificaciones para el dashboard
+ * Cada fecha de corte es una planificación de certificación.
+ * Una actividad en el medio entre fechas de corte NO está vencida; se certifica en el próximo corte.
+ * Pasa a "Atrasada" solo si:
+ *  1) Su fecha de corte objetivo ya venció respecto a la fecha de corte seleccionada.
+ *  2) Se emitió un certificado en o posterior al corte objetivo donde la actividad no estuvo incluida (o quedó con saldo).
  */
 export function getVencimientosHitos(
   proyecto: Proyecto | undefined,
@@ -619,8 +674,24 @@ export function getVencimientosHitos(
   const empMap = new Map<string, string>();
   proyecto.empresas.forEach((e) => empMap.set(e.id, e.nombre));
 
-  const refDateStr = fechaReferencia || new Date().toISOString().split('T')[0];
+  // 1. Recopilar y ordenar todas las fechas de corte del proyecto
+  const allCortes: string[] = [];
+  if (proyecto.fechasCorte) {
+    Object.values(proyecto.fechasCorte).forEach((list) => {
+      if (Array.isArray(list)) allCortes.push(...list);
+    });
+  }
+  const cortes = Array.from(new Set(allCortes.map(normalizeDate).filter(Boolean))).sort();
+
+  const refDateStr = fechaReferencia || getCorteActual(cortes) || getTodayString();
   const refTime = new Date(refDateStr).getTime();
+
+  // 2. Fechas de certificados emitidos en el proyecto
+  const certDocs = getGroupedCertificates(proyecto);
+  const certDates = certDocs
+    .map((c) => normalizeDate(c.fechaCobro) || normalizeDate(c.fechaPresentacion) || normalizeDate(c.fechaAprobacion) || '')
+    .filter(Boolean)
+    .sort();
 
   const vencidos: VencimientoHito[] = [];
   const proximos: VencimientoHito[] = [];
@@ -637,9 +708,12 @@ export function getVencimientosHitos(
       const baseValHito = (Number(e.valorTotal) * Number(h.porcentaje)) / 100;
 
       // Si todos los certificados emitidos para este hito ya están cobrados y cubren el hito,
-      // se considera completamente cobrado y NO debe mostrarse como vencido ni pendiente
+      // se considera completamente cobrado y NO debe mostrarse como pendiente
       const isCobrado = certs.length > 0 &&
-        certs.every((c) => c.estado === 'Cobrado') &&
+        certs.every((c) => {
+          const st = (c.estado || '').toLowerCase().trim();
+          return st === 'cobrado' || st === 'facturado' || st === 'pagado' || Boolean(c.fechaCobro && c.fechaCobro.trim() && normalizeDate(c.fechaCobro) <= refDateStr);
+        }) &&
         (saldo <= 50 || certSum >= baseValHito - 1);
 
       if (isCobrado) return;
@@ -649,12 +723,41 @@ export function getVencimientosHitos(
         const fPlan = getHitoPlannedDate(e, h) || h.fechaManual || '';
         if (!fPlan) return;
 
+        // Corte objetivo: primera fecha de corte posterior o igual a la fecha prevista de la actividad
+        const corteObjetivo = cortes.find((c) => c >= fPlan) || fPlan;
+
+        // Se emitió ya un certificado en o posterior a la fecha prevista O al corte objetivo donde la actividad no estuvo incluida
+        const certPostPlanEmitido = certDates.some((cd) => cd >= fPlan);
+        const certPostCorteEmitido = certDates.some((cd) => cd >= corteObjetivo);
+
+        // El corte objetivo ya venció respecto a la fecha de corte seleccionada / referencia
+        const cutoffPassed = corteObjetivo < refDateStr;
+
+        // Una actividad está ATRASADA si:
+        // 1) Su corte ya venció respecto a la fecha de referencia
+        // 2) O ya se emitió un certificado en fecha >= fPlan (o >= corte) sin incluir esta actividad
+        const esAtrasado = cutoffPassed || certPostPlanEmitido || certPostCorteEmitido;
+
+        // Días de diferencia:
+        // Si está atrasado, calculamos los días de atraso respecto a la fecha de la actividad (o corte vencido)
         const planTime = new Date(fPlan).getTime();
-        const diffMs = planTime - refTime;
-        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        const diffDays = esAtrasado 
+          ? Math.min(Math.round((planTime - refTime) / (1000 * 60 * 60 * 24)), -1)
+          : Math.max(0, Math.round((new Date(corteObjetivo).getTime() - refTime) / (1000 * 60 * 60 * 24)));
 
         let estado = 'Sin certificar';
         if (certSum > 0) estado = 'Parcialmente certificado';
+
+        let motivoAtraso: string | undefined = undefined;
+        if (esAtrasado) {
+          if (cutoffPassed) {
+            motivoAtraso = `Corte ${formatShortDate(corteObjetivo)} vencido sin certificar`;
+          } else if (certPostPlanEmitido) {
+            motivoAtraso = `No incluida en certificado emitido tras su fecha prevista (${formatShortDate(fPlan)})`;
+          } else if (certPostCorteEmitido) {
+            motivoAtraso = `No incluida en certificado emitido del corte`;
+          }
+        }
 
         const item: VencimientoHito = {
           id: `${e.id}_${h.id}`,
@@ -663,17 +766,20 @@ export function getVencimientosHitos(
           empresaNombre: empNombre,
           hitoNombre: h.nombre,
           fechaPrevista: fPlan,
+          fechaCorteObjetivo: corteObjetivo,
           montoHito: Math.round(valorHito * 100) / 100,
           montoCertificado: Math.round(certSum * 100) / 100,
           saldoPendiente: Math.round(saldo * 100) / 100,
           diasDiferencia: diffDays,
-          esVencido: diffDays < 0,
+          esVencido: esAtrasado,
+          esAtrasado: esAtrasado,
+          motivoAtraso,
           entregableId: e.id,
           hitoId: h.id,
           estado,
         };
 
-        if (diffDays < 0) {
+        if (esAtrasado) {
           vencidos.push(item);
         } else {
           proximos.push(item);
@@ -682,10 +788,10 @@ export function getVencimientosHitos(
     });
   });
 
-  // Ordenar vencidos por mayor atraso (más negativos primero)
+  // Ordenar vencidos/atrasados por mayor atraso (más negativos primero)
   vencidos.sort((a, b) => a.diasDiferencia - b.diasDiferencia);
-  // Ordenar próximos por fecha más cercana
-  proximos.sort((a, b) => a.diasDiferencia - b.diasDiferencia);
+  // Ordenar próximos por corte más cercano primero, luego por fecha prevista
+  proximos.sort((a, b) => a.diasDiferencia - b.diasDiferencia || a.fechaPrevista.localeCompare(b.fechaPrevista));
 
   return { vencidos, proximos };
 }
@@ -774,7 +880,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
     const key = certAny.grupo || `${certificado.nombre}_${certificado.fechaCobro || certificado.fechaPresentacion}`;
     const valorHito = getHitoValorEfectivo(entregable, hito, proyecto);
     const importe = Number(certificado.importe) || 0;
-    const isCobrado = certificado.estado === 'Cobrado';
+    const isCobrado = certificado.estado === 'Cobrado' || certificado.estado === 'Facturado';
 
     if (!groupsMap.has(key)) {
       groupsMap.set(key, {
@@ -849,6 +955,7 @@ export interface GastosCertificadoBreakdown {
   gastosParte: number;
   estado: string;
   fecha: string;
+  actividades?: CertificadoDocumento['actividades'];
 }
 
 export interface GastosEntregableBreakdown {
@@ -924,7 +1031,7 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
       docBase += imp * ratioBase;
     });
 
-    if (doc.estado === 'Cobrado') {
+    if (doc.estado === 'Cobrado' || doc.estado === 'Facturado') {
       totalGastosCobrados += docGastos;
     }
     totalGastosCertificados += docGastos;
@@ -938,6 +1045,7 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
       gastosParte: Math.round(docGastos * 100) / 100,
       estado: doc.estado,
       fecha: doc.fechaCobro || doc.fechaPresentacion || '',
+      actividades: doc.actividades,
     };
   });
 
@@ -954,7 +1062,7 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
       h.certificados.forEach((c) => {
         const imp = Number(c.importe) || 0;
         gastoCertificado += imp * ratioGasto;
-        if (c.estado === 'Cobrado') {
+        if (c.estado === 'Cobrado' || c.estado === 'Facturado') {
           gastoCobrado += imp * ratioGasto;
         }
       });
@@ -987,7 +1095,7 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
   proyecto.entregables.forEach((e) => {
     e.hitos.forEach((h) => {
       h.certificados.forEach((c) => {
-        if (c.estado === 'Cobrado') {
+        if (c.estado === 'Cobrado' || c.estado === 'Facturado') {
           totalCobradoGlobal += Number(c.importe) || 0;
         }
       });
@@ -1016,8 +1124,22 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
 export function computeAlertas(proyecto: Proyecto | undefined): AlertaItem[] {
   if (!proyecto || !proyecto.entregables) return [];
 
-  const today = '2026-09-16';
+  const today = getTodayString();
   const alerts: AlertaItem[] = [];
+
+  // Cutoffs and certificates for accurate atraso check
+  const allCortes: string[] = [];
+  if (proyecto.fechasCorte) {
+    Object.values(proyecto.fechasCorte).forEach((list) => {
+      if (Array.isArray(list)) allCortes.push(...list);
+    });
+  }
+  const cortes = Array.from(new Set(allCortes.map(normalizeDate).filter(Boolean))).sort();
+  const certDocs = getGroupedCertificates(proyecto);
+  const certDates = certDocs
+    .map((c) => normalizeDate(c.fechaCobro) || normalizeDate(c.fechaPresentacion) || normalizeDate(c.fechaAprobacion) || '')
+    .filter(Boolean)
+    .sort();
 
   proyecto.entregables.forEach((e) => {
     // Check missing Purchase Order
@@ -1036,15 +1158,17 @@ export function computeAlertas(proyecto: Proyecto | undefined): AlertaItem[] {
 
     let certTotal = 0;
 
-    // Check overdue milestones without certificates
+    // Check overdue/atrasados milestones without certificates
     e.hitos.forEach((h) => {
       let hitoCertTotal = 0;
       h.certificados.forEach((c) => {
         hitoCertTotal += Number(c.importe) || 0;
         certTotal += Number(c.importe) || 0;
 
-        // Check pending payment aging
-        if (c.estado !== 'Cobrado') {
+        // Check pending payment aging (solo si no ha sido cobrado/facturado)
+        const st = (c.estado || '').toLowerCase().trim();
+        const isCobradoCert = st === 'cobrado' || st === 'facturado' || st === 'pagado' || Boolean(c.fechaCobro && c.fechaCobro.trim() && normalizeDate(c.fechaCobro) <= today);
+        if (!isCobradoCert) {
           const certDate = normalizeDate(c.fechaPresentacion);
           if (certDate && certDate < '2026-08-16') {
             alerts.push({
@@ -1064,23 +1188,30 @@ export function computeAlertas(proyecto: Proyecto | undefined): AlertaItem[] {
         }
       });
 
-      // If milestone date passed and no certificate issued
-      const hitoDate = getHitoPlannedDate(e, h);
-      if (hitoDate && hitoDate < today && h.certificados.length === 0) {
-        const montoHito = getHitoValorEfectivo(e, h, proyecto);
-        alerts.push({
-          id: `alert_venc_${e.id}_${h.id}`,
-          tipo: 'vencido',
-          titulo: 'Hito contractual vencido sin certificar',
-          descripcion: `El hito "${h.nombre}" (${h.porcentaje}%) debió presentarse el ${formatShortDate(hitoDate)} por ${formatCurrency(montoHito)}.`,
-          entregableId: e.id,
-          codigoEntregable: e.codigo,
-          hitoId: h.id,
-          hitoNombre: h.nombre,
-          severidad: 'alta',
-          fecha: hitoDate,
-          monto: montoHito,
-        });
+      // Check if milestone target cutoff has passed or a certificate on/after planned date/cutoff was emitted without this milestone
+      const hitoDate = getHitoPlannedDate(e, h) || h.fechaManual || '';
+      if (hitoDate && h.certificados.length === 0) {
+        const corteObjetivo = cortes.find((c) => c >= hitoDate) || hitoDate;
+        const certPostPlanEmitido = certDates.some((cd) => cd >= hitoDate);
+        const certPostCorteEmitido = certDates.some((cd) => cd >= corteObjetivo);
+        const cutoffPassed = corteObjetivo < today;
+
+        if (cutoffPassed || certPostPlanEmitido || certPostCorteEmitido) {
+          const montoHito = getHitoValorEfectivo(e, h, proyecto);
+          alerts.push({
+            id: `alert_venc_${e.id}_${h.id}`,
+            tipo: 'vencido',
+            titulo: 'Actividad atrasada pendiente de certificar',
+            descripcion: `El hito "${h.nombre}" (${h.porcentaje}%) de ${e.codigo} (${e.descripcion}) está atrasado. Debía certificarse el ${formatShortDate(hitoDate)} por ${formatCurrency(montoHito)}.`,
+            entregableId: e.id,
+            codigoEntregable: e.codigo,
+            hitoId: h.id,
+            hitoNombre: h.nombre,
+            severidad: 'alta',
+            fecha: corteObjetivo,
+            monto: montoHito,
+          });
+        }
       }
     });
 
@@ -1118,7 +1249,7 @@ export function computeConciliacion(proyecto: Proyecto | undefined): Conciliacio
       h.certificados.forEach((c) => {
         const imp = Number(c.importe) || 0;
         certTotal += imp;
-        if (c.estado === 'Cobrado') {
+        if (c.estado === 'Cobrado' || c.estado === 'Facturado') {
           cobradoTotal += imp;
         }
       });
@@ -1161,8 +1292,25 @@ export function computeConciliacion(proyecto: Proyecto | undefined): Conciliacio
 export function computeVencimientos(proyecto: Proyecto | undefined): VencimientoItem[] {
   if (!proyecto || !proyecto.entregables) return [];
 
-  const today = new Date('2026-09-16');
+  const todayStr = getTodayString();
+  const today = new Date(todayStr);
   const items: VencimientoItem[] = [];
+
+  // Cutoff dates
+  const allCortes: string[] = [];
+  if (proyecto.fechasCorte) {
+    Object.values(proyecto.fechasCorte).forEach((list) => {
+      if (Array.isArray(list)) allCortes.push(...list);
+    });
+  }
+  const cortes = Array.from(new Set(allCortes.map(normalizeDate).filter(Boolean))).sort();
+
+  // Certificate dates
+  const certDocs = getGroupedCertificates(proyecto);
+  const certDates = certDocs
+    .map((c) => normalizeDate(c.fechaCobro) || normalizeDate(c.fechaPresentacion) || normalizeDate(c.fechaAprobacion) || '')
+    .filter(Boolean)
+    .sort();
 
   proyecto.entregables.forEach((e) => {
     e.hitos.forEach((h) => {
@@ -1172,17 +1320,30 @@ export function computeVencimientos(proyecto: Proyecto | undefined): Vencimiento
       const saldoCert = Math.max(0, valorHito - certSum);
       const baseValHito = (Number(e.valorTotal) * Number(h.porcentaje)) / 100;
 
-      // Un hito se considera cobrado si tiene certificados cobrados que cubren su importe
+      // Un hito se considera cobrado si tiene certificados cobrados/facturados o con fecha de cobro registrada
       const isFullyCobrado = certs.length > 0 &&
-        certs.every((c) => c.estado === 'Cobrado') &&
+        certs.every((c) => {
+          const st = (c.estado || '').toLowerCase().trim();
+          return st === 'cobrado' || st === 'facturado' || st === 'pagado' || Boolean(c.fechaCobro && c.fechaCobro.trim() && normalizeDate(c.fechaCobro) <= todayStr);
+        }) &&
         (saldoCert <= 50 || certSum >= baseValHito - 1);
 
-      // Si no está cobrado y tiene saldo pendiente por certificar, se incluye el hito previsto
+      // Si no está cobrado y tiene saldo pendiente por certificar, se evalúa con la lógica de fechas de corte
       if (!isFullyCobrado && saldoCert > 50) {
-        const targetDateStr = getHitoPlannedDate(e, h);
+        const targetDateStr = getHitoPlannedDate(e, h) || h.fechaManual || '';
         if (targetDateStr) {
-          const targetDate = new Date(targetDateStr);
-          const diffDays = Math.round((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          const corteObjetivo = cortes.find((c) => c >= targetDateStr) || targetDateStr;
+          const certPostPlanEmitido = certDates.some((cd) => cd >= targetDateStr);
+          const certPostCorteEmitido = certDates.some((cd) => cd >= corteObjetivo);
+          const cutoffPassed = corteObjetivo < todayStr;
+          const esAtrasado = cutoffPassed || certPostPlanEmitido || certPostCorteEmitido;
+
+          let diffDays = 0;
+          if (esAtrasado) {
+            diffDays = Math.min(Math.round((new Date(targetDateStr).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)), -1);
+          } else {
+            diffDays = Math.max(0, Math.round((new Date(corteObjetivo).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+          }
 
           items.push({
             id: `venc_${e.id}_${h.id}`,
@@ -1190,18 +1351,20 @@ export function computeVencimientos(proyecto: Proyecto | undefined): Vencimiento
             codigo: e.codigo,
             descripcion: e.descripcion,
             hitoNombre: h.nombre,
-            fechaVencimiento: targetDateStr,
+            fechaVencimiento: esAtrasado ? targetDateStr : corteObjetivo,
             monto: Math.round(saldoCert * 100) / 100,
             tipo: 'hito',
             diasRestantes: diffDays,
-            estado: diffDays < 0 ? 'Vencido sin certificar' : 'Pendiente',
+            estado: esAtrasado ? 'Atrasado sin certificar' : 'Pendiente próximo corte',
           });
         }
       }
 
-      // Check certificate payment due dates (solo certificados que NO han sido cobrados aún)
+      // Check certificate payment due dates (solo certificados que NO han sido cobrados/facturados aún)
       certs.forEach((c) => {
-        if (c.estado !== 'Cobrado') {
+        const st = (c.estado || '').toLowerCase().trim();
+        const isCobrado = st === 'cobrado' || st === 'facturado' || st === 'pagado' || Boolean(c.fechaCobro && c.fechaCobro.trim() && normalizeDate(c.fechaCobro) <= todayStr);
+        if (!isCobrado) {
           const cobroDateStr = normalizeDate(c.fechaCobro || c.fechaPresentacion);
           if (cobroDateStr) {
             const cobroDate = new Date(cobroDateStr);
@@ -1264,18 +1427,23 @@ export interface ProyeccionCorteSummary {
   montoProximoCorte: number;
   montoSiguientesCortes: number;
   totalPlanificadoRestante: number;
+  saldoTotalPendiente: number;
+  montoAtrasadoOPendiente: number;
   cortesCount: number;
 }
 
-export function getProyeccionCorteSummary(proyecto: Proyecto | undefined, today = '2026-09-16'): ProyeccionCorteSummary {
+export function getProyeccionCorteSummary(proyecto: Proyecto | undefined, today?: string): ProyeccionCorteSummary {
+  const refToday = today || getTodayString();
   if (!proyecto || !proyecto.entregables) {
     return {
       corteAnterior: '',
-      corteActual: today,
+      corteActual: refToday,
       corteProximo: '',
       montoProximoCorte: 0,
       montoSiguientesCortes: 0,
       totalPlanificadoRestante: 0,
+      saldoTotalPendiente: 0,
+      montoAtrasadoOPendiente: 0,
       cortesCount: 0,
     };
   }
@@ -1288,17 +1456,17 @@ export function getProyeccionCorteSummary(proyecto: Proyecto | undefined, today 
   }
   const cortes = Array.from(new Set(allCortesRaw.map(normalizeDate).filter(Boolean))).sort();
 
-  // Find index of current cutoff or the one immediately before/on today
+  // Find index of current cutoff or the one immediately before/on refToday
   let actualIdx = -1;
   for (let i = 0; i < cortes.length; i++) {
-    if (cortes[i] <= today) {
+    if (cortes[i] <= refToday) {
       actualIdx = i;
     } else {
       break;
     }
   }
 
-  const corteActual = actualIdx >= 0 ? cortes[actualIdx] : today;
+  const corteActual = actualIdx >= 0 ? cortes[actualIdx] : refToday;
   const corteAnterior = actualIdx > 0 ? cortes[actualIdx - 1] : '';
   const nextIdx = cortes.findIndex((c) => c > corteActual);
   const corteProximo = nextIdx !== -1 ? cortes[nextIdx] : '';
@@ -1331,6 +1499,10 @@ export function getProyeccionCorteSummary(proyecto: Proyecto | undefined, today 
     });
   });
 
+  const metrics = computeProjectMetrics(proyecto, corteActual);
+  const saldoTotalPendiente = metrics.saldoPendienteTaging;
+  const montoAtrasadoOPendiente = Math.max(0, Math.round((saldoTotalPendiente - totalPlanificadoRestante) * 100) / 100);
+
   return {
     corteAnterior,
     corteActual,
@@ -1338,6 +1510,8 @@ export function getProyeccionCorteSummary(proyecto: Proyecto | undefined, today 
     montoProximoCorte: Math.round(montoProximoCorte * 100) / 100,
     montoSiguientesCortes: Math.round(montoSiguientesCortes * 100) / 100,
     totalPlanificadoRestante: Math.round(totalPlanificadoRestante * 100) / 100,
+    saldoTotalPendiente: Math.round(saldoTotalPendiente * 100) / 100,
+    montoAtrasadoOPendiente: Math.round(montoAtrasadoOPendiente * 100) / 100,
     cortesCount: cortes.length,
   };
 }

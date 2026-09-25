@@ -87,6 +87,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
   // Multi-activity table states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'todos' | 'vencidos' | 'proximos' | 'con_saldo' | 'seleccionados'>('todos');
+  const [mostrarCobrados, setMostrarCobrados] = useState(false);
   const [sortBy, setSortBy] = useState<'fecha' | 'codigo' | 'pendiente'>('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [actividades, setActividades] = useState<ActividadSeleccionada[]>([]);
@@ -98,6 +99,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
     // Reset filters
     setSearchQuery('');
     setFilterMode('todos');
+    setMostrarCobrados(false);
 
     const todayStr = new Date().toISOString().split('T')[0];
     const todayTime = new Date(todayStr).getTime();
@@ -137,7 +139,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       setFechaPresentacion(normalizeDate(targetDoc.fechaPresentacion) || '');
       setFechaAprobacion(normalizeDate(targetDoc.fechaAprobacion) || '');
       setFechaCobro(normalizeDate(targetDoc.fechaCobro) || '');
-      setEstado(targetDoc.estado || 'Presentado');
+      setEstado(targetDoc.estado === 'Cobrado' ? 'Facturado' : targetDoc.estado || 'Presentado');
       setTipo(targetDoc.tipo || 'Normal');
       setObservaciones(targetDoc.observaciones || '');
 
@@ -206,7 +208,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       setFechaPresentacion(normalizeDate(c.fechaPresentacion) || '');
       setFechaAprobacion(normalizeDate(c.fechaAprobacion) || '');
       setFechaCobro(normalizeDate(c.fechaCobro) || '');
-      setEstado(c.estado || 'Presentado');
+      setEstado(c.estado === 'Cobrado' ? 'Facturado' : c.estado || 'Presentado');
       setTipo(c.tipo || 'Normal');
       setObservaciones(c.observaciones || '');
 
@@ -383,9 +385,22 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
     return actividades.filter((a) => a.pendiente > 0.01).length;
   }, [actividades]);
 
+  const totalPendientesCount = useMemo(() => {
+    return actividades.filter((a) => a.pendiente > 0.01 || a.seleccionado).length;
+  }, [actividades]);
+
+  const totalCobradosCount = useMemo(() => {
+    return actividades.filter((a) => a.pendiente <= 0.01 && !a.seleccionado).length;
+  }, [actividades]);
+
   // Filter & sort activities
   const filteredActividades = useMemo(() => {
     let result = [...actividades];
+
+    // Ocultar por defecto actividades que ya fueron cobradas y no tienen saldo pendiente
+    if (!mostrarCobrados) {
+      result = result.filter((a) => a.pendiente > 0.01 || a.seleccionado);
+    }
 
     // 1. Filter by mode
     if (filterMode === 'seleccionados') {
@@ -429,7 +444,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
     });
 
     return result;
-  }, [actividades, filterMode, searchQuery, sortBy, sortOrder]);
+  }, [actividades, filterMode, mostrarCobrados, searchQuery, sortBy, sortOrder]);
 
   const seleccionadasCount = actividades.filter((a) => a.seleccionado).length;
 
@@ -630,11 +645,11 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
             </div>
           </div>
 
-          {/* Fila 3: Fecha cobro, Estado, Tipo */}
+          {/* Fila 3: Fecha cobro/facturación, Estado, Tipo */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block font-medium text-slate-300 mb-1">
-                Fecha cobro
+                Fecha facturación / cobro
               </label>
               <input
                 type="date"
@@ -649,11 +664,11 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
                 Estado
               </label>
               <select
-                value={estado}
+                value={estado === 'Cobrado' ? 'Facturado' : estado}
                 onChange={(e) => {
                   const newEstado = e.target.value;
                   setEstado(newEstado);
-                  if (newEstado === 'Cobrado' && !fechaCobro) {
+                  if ((newEstado === 'Facturado' || newEstado === 'Cobrado') && !fechaCobro) {
                     setFechaCobro(fechaPresentacion || new Date().toISOString().split('T')[0]);
                   }
                 }}
@@ -661,7 +676,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
               >
                 <option value="Presentado">Presentado</option>
                 <option value="Aprobado">Aprobado</option>
-                <option value="Cobrado">Cobrado</option>
+                <option value="Facturado">Facturado</option>
                 <option value="Rechazado">Rechazado</option>
               </select>
             </div>
@@ -724,7 +739,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
                       : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  Todos ({actividades.length})
+                  Pendientes ({totalPendientesCount})
                 </button>
 
                 <button
@@ -753,18 +768,6 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
                   <span>Próximos 30d ({totalProximosCount})</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setFilterMode('con_saldo')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                    filterMode === 'con_saldo'
-                      ? 'bg-emerald-600 text-white font-semibold'
-                      : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  Con saldo ({totalConSaldoCount})
-                </button>
-
                 {isEditMode && seleccionadasCount > 0 && (
                   <button
                     type="button"
@@ -777,6 +780,21 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
                   >
                     <CheckSquare className="w-3 h-3" />
                     <span>En este cert. ({seleccionadasCount})</span>
+                  </button>
+                )}
+
+                {totalCobradosCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarCobrados(!mostrarCobrados)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                      mostrarCobrados
+                        ? 'bg-amber-600/30 text-amber-200 border border-amber-500/40 font-semibold'
+                        : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-700/80 border border-slate-700/40'
+                    }`}
+                    title={mostrarCobrados ? "Ocultar actividades ya cobradas sin saldo" : "Ver actividades ya cobradas (saldo $0)"}
+                  >
+                    {mostrarCobrados ? 'Ocultar ya cobradas' : `Ver ya cobradas ($0) (${totalCobradosCount})`}
                   </button>
                 )}
               </div>

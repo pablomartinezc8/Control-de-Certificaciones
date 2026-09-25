@@ -59,11 +59,11 @@ export const MetricsCards: React.FC<MetricsCardsProps> = ({
           </div>
         </div>
 
-        {/* Card 3: SALDO PENDIENTE A COBRAR */}
+        {/* Card 3: SALDO PENDIENTE A CERTIFICAR */}
         <div className="bg-white dark:bg-[#0B1426] border border-slate-200/90 dark:border-slate-800/90 rounded-xl p-4 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              SALDO PENDIENTE A COBRAR
+              SALDO PENDIENTE A CERTIFICAR
             </span>
             <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
               <AlertTriangle className="w-4 h-4" />

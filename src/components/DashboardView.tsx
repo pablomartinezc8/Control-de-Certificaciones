@@ -6,7 +6,8 @@ import {
   getVencimientosHitos,
   formatCurrency, 
   formatShortDate, 
-  normalizeDate 
+  normalizeDate,
+  getCorteActual 
 } from '../utils/calculations';
 import { MetricsCards } from './MetricsCards';
 import { CurvaSView } from './CurvaSView';
@@ -28,8 +29,7 @@ import {
   Printer,
   ChevronRight,
   ExternalLink,
-  Plus,
-  ClipboardCheck
+  Plus
 } from 'lucide-react';
 import { exportElementToPng } from '../utils/imageExport';
 import { PrintReportModal } from './PrintReportModal';
@@ -64,12 +64,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return Array.from(new Set(list.map(normalizeDate).filter(Boolean))).sort();
   }, [proyecto]);
 
-  const todayStr = '2026-09-16';
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const defaultActualDate = useMemo(() => {
-    const past = todasLasFechasCorte.filter((d) => d <= todayStr);
-    return past[past.length - 1] || todasLasFechasCorte[todasLasFechasCorte.length - 1] || todayStr;
-  }, [todasLasFechasCorte]);
+    return getCorteActual(todasLasFechasCorte, todayStr) || todayStr;
+  }, [todasLasFechasCorte, todayStr]);
 
   // Fecha de corte activa seleccionada en el dashboard
   const [internalCutoffDate, setInternalCutoffDate] = useState<string>(() => {
@@ -230,17 +229,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <button
               type="button"
-              onClick={() => onNavigateToTab('modo_campo')}
-              id="btn-abrir-modo-campo-dashboard"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl shadow-xs transition-colors"
-              title="Abrir Modo Campo / Inspección simplificado para celulares y tablets"
-            >
-              <ClipboardCheck className="w-4 h-4 text-emerald-600" />
-              <span>Modo Campo 👷</span>
-            </button>
-
-            <button
-              type="button"
               onClick={handleDownloadDashboardImage}
               disabled={downloadingReport}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-xs transition-colors disabled:opacity-50"
@@ -355,7 +343,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 4. Módulo de Tablas Operativas: Próximos Vencimientos y Vencidos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Tabla: Vencidos / Atrasados */}
+        {/* Tabla: Actividades Atrasadas */}
         <div className="bg-white border border-rose-200/90 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-4 bg-rose-50/50 border-b border-rose-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -364,15 +352,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div>
                 <h4 className="text-sm font-bold text-rose-950">
-                  Hitos Vencidos / Atrasados
+                  Actividades Atrasadas
                 </h4>
                 <p className="text-[11px] text-rose-700">
-                  Hitos cuya fecha prevista venció antes de la fecha de corte y poseen saldo sin certificar.
+                  Actividades cuyo corte de certificación ya venció o no fueron incluidas en los certificados emitidos.
                 </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-200/80 text-rose-900">
-              {vencidos.length} {vencidos.length === 1 ? 'vencido' : 'vencidos'}
+            <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
+              vencidos.length === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-200/80 text-rose-900'
+            }`}>
+              {vencidos.length === 0 ? 'Al día' : `${vencidos.length} ${vencidos.length === 1 ? 'atrasada' : 'atrasadas'}`}
             </span>
           </div>
 
@@ -380,14 +370,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {vencidos.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                No hay hitos vencidos con saldo pendiente a la fecha de corte elegida.
+                No hay actividades atrasadas ni pendientes de cortes cerrados.
               </div>
             ) : (
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase tracking-wider text-[10px] font-bold">
                     <th className="py-2.5 px-3">Actividad / Hito</th>
-                    <th className="py-2.5 px-3">Fecha Prevista</th>
+                    <th className="py-2.5 px-3">Corte Planif.</th>
                     <th className="py-2.5 px-3 text-right">Saldo Pend.</th>
                     <th className="py-2.5 px-3 text-center">Atraso</th>
                     <th className="py-2.5 px-3 text-center">Acción</th>
@@ -402,16 +392,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {v.entregableDescripcion}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">
-                        {v.fechaPrevista}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="font-mono font-medium text-slate-800">
+                          {formatShortDate(v.fechaCorteObjetivo || v.fechaPrevista)}
+                        </div>
+                        <div className="text-[10px] text-slate-400" title={`Fecha programada de actividad: ${v.fechaPrevista}`}>
+                          Act: {formatShortDate(v.fechaPrevista)}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-rose-700 whitespace-nowrap">
                         {formatCurrency(v.saldoPendiente)}
                       </td>
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800">
+                        <span 
+                          className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800"
+                          title={v.motivoAtraso || `${Math.abs(v.diasDiferencia)} días de atraso`}
+                        >
                           {Math.abs(v.diasDiferencia)} días atraso
                         </span>
+                        {v.motivoAtraso && (
+                          <div className="text-[9px] text-rose-600 truncate max-w-[140px] mx-auto mt-0.5" title={v.motivoAtraso}>
+                            {v.motivoAtraso}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         <button
@@ -438,7 +441,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Tabla: Próximos Vencimientos */}
+        {/* Tabla: Próximas Certificaciones Planificadas */}
         <div className="bg-white border border-blue-200/90 rounded-2xl shadow-xs overflow-hidden">
           <div className="p-4 bg-blue-50/50 border-b border-blue-100 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -447,12 +450,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div>
                 <h4 className="text-sm font-bold text-blue-950">
-                  Próximos Vencimientos Contractuales
+                  Próximas Certificaciones Planificadas
                 </h4>
                 <p className="text-[11px] text-blue-700">
                   {horizonteProximos === 'todos'
                     ? `Todos los hitos futuros pendientes (${formatCurrency(totalMontoProximos)} programados).`
-                    : `Hitos a vencer dentro de los próximos ${horizonteProximos} días (${formatCurrency(totalMontoProximos)} programados).`}
+                    : `Hitos a certificar dentro de los próximos ${horizonteProximos} días (${formatCurrency(totalMontoProximos)} programados).`}
                 </p>
               </div>
             </div>
@@ -491,7 +494,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="overflow-x-auto max-h-96">
             {proximosFiltrados.length === 0 ? (
               <div className="p-8 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
-                <p>No se registran vencimientos contractuales dentro de los próximos {horizonteProximos} días.</p>
+                <p>No se registran certificaciones previstas dentro de los próximos {horizonteProximos} días.</p>
                 {horizonteProximos !== 'todos' && proximos.length > 0 && (
                   <button
                     type="button"
@@ -507,7 +510,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase tracking-wider text-[10px] font-bold">
                     <th className="py-2.5 px-3">Actividad / Hito</th>
-                    <th className="py-2.5 px-3">Fecha Prevista</th>
+                    <th className="py-2.5 px-3">Corte Planif.</th>
                     <th className="py-2.5 px-3 text-right">Monto Hito</th>
                     <th className="py-2.5 px-3 text-center">Faltan</th>
                     <th className="py-2.5 px-3 text-center">Acción</th>
@@ -522,21 +525,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {p.entregableDescripcion}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">
-                        {p.fechaPrevista}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="font-mono font-medium text-slate-800">
+                          {formatShortDate(p.fechaCorteObjetivo || p.fechaPrevista)}
+                        </div>
+                        <div className="text-[10px] text-slate-400" title={`Fecha programada de actividad: ${p.fechaPrevista}`}>
+                          Act: {formatShortDate(p.fechaPrevista)}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-800 whitespace-nowrap">
                         {formatCurrency(p.montoHito)}
                       </td>
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                          p.diasDiferencia <= 3
+                          p.diasDiferencia === 0
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : p.diasDiferencia <= 3
                             ? 'bg-rose-100 text-rose-800'
                             : p.diasDiferencia <= 7
                             ? 'bg-amber-100 text-amber-800'
                             : 'bg-blue-100 text-blue-800'
                         }`}>
-                          {p.diasDiferencia === 0 ? 'Hoy' : `${p.diasDiferencia} días`}
+                          {p.diasDiferencia === 0 ? 'En este corte' : `${p.diasDiferencia} días`}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-center">
@@ -550,7 +560,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             }
                           }}
                           className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[10px] font-semibold transition-colors"
-                          title="Certificar este hito"
+                          title="Certificar este hito ahora"
                         >
                           <Plus className="w-3 h-3" />
                           <span>Certificar</span>
