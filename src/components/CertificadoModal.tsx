@@ -7,9 +7,10 @@ import {
   getHitoPlannedDate,
   getGroupedCertificates,
   CertificadoDocumento,
-  formatShortDate
+  formatShortDate,
+  getTotalGastosGenerales
 } from '../utils/calculations';
-import { X, Search, Calendar, AlertCircle, Clock, CheckSquare, Square, ArrowUpDown, Filter } from 'lucide-react';
+import { X, Search, Calendar, AlertCircle, Clock, CheckSquare, Square, ArrowUpDown, Filter, DollarSign } from 'lucide-react';
 
 export interface ActividadSeleccionada {
   entregableId: string;
@@ -40,12 +41,14 @@ interface CertificadoModalProps {
   ) => void;
   onSaveMultiCertificado?: (
     baseCertificado: Omit<Certificado, 'id' | 'importe'>,
-    actividades: { entregableId: string; hitoId: string; importe: number }[]
+    actividades: { entregableId: string; hitoId: string; importe: number }[],
+    gastosGenerales?: number
   ) => void;
   onSaveDocumento?: (
     docKey: string,
     baseCertificado: Omit<Certificado, 'id' | 'importe'>,
-    actividades: { entregableId: string; hitoId: string; importe: number; seleccionado: boolean; certId?: string }[]
+    actividades: { entregableId: string; hitoId: string; importe: number; seleccionado: boolean; certId?: string }[],
+    gastosGenerales?: number
   ) => void;
   initialCertificado?: {
     certificado: Certificado;
@@ -83,6 +86,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
   const [tipo, setTipo] = useState<string>('Normal');
   const [observaciones, setObservaciones] = useState('');
   const [activeDocKey, setActiveDocKey] = useState<string>('');
+  const [gastosGenerales, setGastosGenerales] = useState<number | ''>('');
 
   // Multi-activity table states
   const [searchQuery, setSearchQuery] = useState('');
@@ -198,6 +202,14 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       });
 
       setActividades(acts);
+
+      const existingGG = 
+        Number(proyecto.certificadosGastos?.[targetDoc.grupoKey]) ||
+        Number(proyecto.certificadosGastos?.[targetDoc.id]) ||
+        Number(proyecto.certificadosGastos?.[targetDoc.numero]) ||
+        targetDoc.gastosGenerales ||
+        0;
+      setGastosGenerales(existingGG > 0 ? existingGG : '');
     } else if (initialCertificado) {
       // Fallback single certificate not in a group
       const c = initialCertificado.certificado;
@@ -211,6 +223,9 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       setEstado(c.estado === 'Cobrado' ? 'Facturado' : c.estado || 'Presentado');
       setTipo(c.tipo || 'Normal');
       setObservaciones(c.observaciones || '');
+
+      const existingGG = Number(c.gastosGenerales) || 0;
+      setGastosGenerales(existingGG > 0 ? existingGG : '');
 
       const acts: ActividadSeleccionada[] = [];
       proyecto.entregables.forEach((e) => {
@@ -295,6 +310,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       setEstado('Presentado');
       setTipo('Normal');
       setObservaciones('');
+      setGastosGenerales('');
     }
   }, [isOpen, initialCertificado, initialDocumento, defaultHito, proyecto]);
 
@@ -448,8 +464,25 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
 
   const seleccionadasCount = actividades.filter((a) => a.seleccionado).length;
 
-  // Calculate total certificate amount: true sum of all selected activities
-  const totalCertificado = useMemo(() => {
+  // Seguimiento y presupuesto de Gastos Generales
+  const totalPresupuestoGG = useMemo(() => getTotalGastosGenerales(proyecto), [proyecto]);
+
+  const ggYaCertificadoEnOtros = useMemo(() => {
+    let sum = 0;
+    const docs = getGroupedCertificates(proyecto);
+    docs.forEach((d) => {
+      if (activeDocKey && (d.grupoKey === activeDocKey || d.id === activeDocKey)) {
+        return;
+      }
+      sum += d.gastosGenerales || 0;
+    });
+    return Math.round(sum * 100) / 100;
+  }, [proyecto, activeDocKey]);
+
+  const saldoDisponibleGG = Math.max(0, Math.round((totalPresupuestoGG - ggYaCertificadoEnOtros) * 100) / 100);
+
+  // Subtotal de actividades seleccionadas
+  const totalActividades = useMemo(() => {
     return (
       Math.round(
         actividades
@@ -459,14 +492,18 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
     );
   }, [actividades]);
 
+  const numGastosGenerales = Number(gastosGenerales) || 0;
+  // Total del certificado: Actividades seleccionadas + Gastos Generales facturados
+  const totalCertificado = Math.round((totalActividades + numGastosGenerales) * 100) / 100;
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     const selectedActs = actividades.filter((a) => a.seleccionado && a.importeACobrar > 0);
-    if (selectedActs.length === 0) {
-      alert('Por favor seleccione al menos una actividad con un importe mayor a 0 para certificar.');
+    if (selectedActs.length === 0 && numGastosGenerales <= 0) {
+      alert('Por favor seleccione al menos una actividad o ingrese un monto de Gastos Generales mayor a 0 para certificar.');
       return;
     }
 
@@ -492,7 +529,8 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
           importe: Number(a.importeACobrar) || 0,
           seleccionado: a.seleccionado,
           certId: a.certId,
-        }))
+        })),
+        numGastosGenerales
       );
       onClose();
       return;
@@ -503,7 +541,8 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       const updatedCert: Certificado = {
         ...initialCertificado.certificado,
         ...baseData,
-        importe: targetAct ? Number(targetAct.importeACobrar) || 0 : totalCertificado,
+        importe: targetAct ? Number(targetAct.importeACobrar) || 0 : totalActividades,
+        gastosGenerales: numGastosGenerales,
       };
       onSaveCertificado(initialCertificado.entregableId, initialCertificado.hitoId, updatedCert, true);
       onClose();
@@ -518,15 +557,17 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
           entregableId: a.entregableId,
           hitoId: a.hitoId,
           importe: Number(a.importeACobrar) || 0,
-        }))
+        })),
+        numGastosGenerales
       );
     } else {
       // Fallback single save
-      selectedActs.forEach((act) => {
+      selectedActs.forEach((act, idx) => {
         const newCert: Certificado = {
           id: `cert_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
           ...baseData,
           importe: Number(act.importeACobrar) || 0,
+          gastosGenerales: idx === 0 ? numGastosGenerales : 0,
         };
         onSaveCertificado(act.entregableId, act.hitoId, newCert, false);
       });
@@ -694,6 +735,80 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
                 <option value="Anticipo">Anticipo</option>
                 <option value="Retención">Retención</option>
               </select>
+            </div>
+          </div>
+
+          {/* Sección de Gastos Generales del Proyecto */}
+          <div className="p-3.5 bg-gradient-to-r from-purple-950/40 via-[#0e1628] to-indigo-950/30 border border-purple-800/50 rounded-xl space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-purple-800/40">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-purple-900/60 text-purple-300">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-white text-xs">
+                    Gastos Generales del Proyecto
+                  </span>
+                  <p className="text-[11px] text-purple-300/80">
+                    Monto de gastos generales a cobrar / certificar en este documento
+                  </p>
+                </div>
+              </div>
+
+              {/* Info de saldo de GG */}
+              <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                <span className="text-slate-400">
+                  Presupuesto GG: <strong className="text-white font-mono">{formatCurrency(totalPresupuestoGG)}</strong>
+                </span>
+                <span className="text-slate-400">
+                  Ya cobrado en otros: <strong className="text-emerald-400 font-mono">{formatCurrency(ggYaCertificadoEnOtros)}</strong>
+                </span>
+                <span className="text-purple-300">
+                  Saldo disponible: <strong className="text-purple-200 font-mono">{formatCurrency(saldoDisponibleGG)}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-0.5">
+              <div className="flex-1 w-full">
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                  Monto a certificar de Gastos Generales ($ USD):
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-slate-400 font-mono text-xs">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gastosGenerales}
+                    onChange={(e) => setGastosGenerales(e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value)))}
+                    placeholder="0.00 (ej. ingrese el valor a cobrar en este certificado)"
+                    className="w-full pl-7 pr-3 py-1.5 bg-[#080d19] border border-purple-700/60 rounded-lg text-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-purple-400 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 self-end sm:self-auto pt-2 sm:pt-4 shrink-0">
+                {saldoDisponibleGG > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setGastosGenerales(saldoDisponibleGG)}
+                    className="px-2.5 py-1.5 rounded-lg bg-purple-900/60 hover:bg-purple-800 text-purple-200 text-[11px] font-semibold transition border border-purple-700/60"
+                    title="Cobrar todo el saldo pendiente de gastos generales"
+                  >
+                    Cobrar saldo restante ({formatCurrency(saldoDisponibleGG)})
+                  </button>
+                )}
+                {gastosGenerales !== '' && Number(gastosGenerales) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setGastosGenerales('')}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium transition"
+                  >
+                    Quitar GG ($0)
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1049,19 +1164,25 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
             </div>
 
             {/* Total del certificado */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 px-1">
-              <div className="text-xs text-slate-400 flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 px-1 border-t border-slate-800/80">
+              <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3">
                 <span>
-                  <strong className="text-white font-mono">{seleccionadasCount}</strong> actividades seleccionadas
+                  <strong className="text-white font-mono">{seleccionadasCount}</strong> actividades seleccionadas: <strong className="text-slate-200 font-mono">{formatCurrency(totalActividades)}</strong>
                 </span>
+                {numGastosGenerales > 0 && (
+                  <span className="text-purple-300 font-medium">
+                    • Gastos Generales: <strong className="text-purple-200 font-mono">{formatCurrency(numGastosGenerales)}</strong>
+                  </span>
+                )}
                 {totalVencidosCount > 0 && (
                   <span className="text-rose-400 font-medium">
                     • {actividades.filter(a => a.seleccionado && a.esVencido).length} de {totalVencidosCount} vencidos seleccionados
                   </span>
                 )}
               </div>
-              <div className="text-sm font-bold text-white font-mono bg-[#070c17] px-3.5 py-1.5 rounded-lg border border-slate-800">
-                Total del certificado: <span className="text-emerald-400 ml-1">{formatCurrency(totalCertificado)}</span>
+              <div className="text-sm font-bold text-white font-mono bg-[#070c17] px-4 py-2 rounded-lg border border-slate-800 flex items-center gap-2 shrink-0">
+                <span className="text-slate-400 text-xs font-normal uppercase tracking-wider">Total Certificado:</span>
+                <span className="text-emerald-400 text-base">{formatCurrency(totalCertificado)}</span>
               </div>
             </div>
           </div>

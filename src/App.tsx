@@ -11,7 +11,8 @@ import {
   Certificado, 
   GastoActividad, 
   Empresa, 
-  FiltrosState 
+  FiltrosState,
+  AvanceCorteData
 } from './types';
 import { INITIAL_DATA } from './data/initialData';
 import { computeProjectMetrics, CertificadoDocumento, normalizeDate } from './utils/calculations';
@@ -430,9 +431,12 @@ export default function App() {
 
   const handleSaveMultiCertificado = (
     baseCertificado: Omit<Certificado, 'id' | 'importe'>,
-    actividades: { entregableId: string; hitoId: string; importe: number }[]
+    actividades: { entregableId: string; hitoId: string; importe: number }[],
+    gastosGenerales?: number
   ) => {
     const groupId = `grp_${Date.now()}`;
+    const numGG = Number(gastosGenerales) || 0;
+
     updateAppData((prev) => ({
       ...prev,
       proyectos: prev.proyectos.map((proj) => {
@@ -441,6 +445,7 @@ export default function App() {
         const actMap = new Map<string, number>();
         actividades.forEach((a) => actMap.set(`${a.entregableId}__${a.hitoId}`, a.importe));
 
+        let certCreated = false;
         const updatedEntregables = proj.entregables.map((ent) => {
           let hasChanges = false;
           const updatedHitos = ent.hitos.map((h) => {
@@ -454,7 +459,9 @@ export default function App() {
                   id: `cert_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
                   grupo: groupId,
                   importe: imp,
+                  gastosGenerales: !certCreated ? numGG : 0,
                 };
+                certCreated = true;
                 return {
                   ...h,
                   certificados: [...h.certificados, newCert],
@@ -467,9 +474,38 @@ export default function App() {
           return hasChanges ? { ...ent, hitos: updatedHitos } : ent;
         });
 
+        // Si sólo se cobraron Gastos Generales sin actividades, asociar el certificado al primer hito disponible
+        if (!certCreated && numGG > 0 && updatedEntregables.length > 0 && updatedEntregables[0].hitos.length > 0) {
+          const firstEnt = updatedEntregables[0];
+          const firstHito = firstEnt.hitos[0];
+          const newCert: Certificado = {
+            ...baseCertificado,
+            id: `cert_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            grupo: groupId,
+            importe: 0,
+            gastosGenerales: numGG,
+          };
+          updatedEntregables[0] = {
+            ...firstEnt,
+            hitos: [
+              {
+                ...firstHito,
+                certificados: [...firstHito.certificados, newCert],
+              },
+              ...firstEnt.hitos.slice(1),
+            ],
+          };
+        }
+
+        const updatedCertificadosGastos = {
+          ...(proj.certificadosGastos || {}),
+          [groupId]: numGG,
+        };
+
         return {
           ...proj,
           entregables: updatedEntregables,
+          certificadosGastos: updatedCertificadosGastos,
         };
       }),
     }));
@@ -680,7 +716,8 @@ export default function App() {
   const handleSaveDocumento = (
     docKey: string,
     baseCertificado: Omit<Certificado, 'id' | 'importe'>,
-    actividades: { entregableId: string; hitoId: string; importe: number; seleccionado: boolean; certId?: string }[]
+    actividades: { entregableId: string; hitoId: string; importe: number; seleccionado: boolean; certId?: string }[],
+    gastosGenerales?: number
   ) => {
     const finalBaseCert: Omit<Certificado, 'id' | 'importe'> = {
       ...baseCertificado,
@@ -689,6 +726,7 @@ export default function App() {
           ? baseCertificado.fechaPresentacion || new Date().toISOString().split('T')[0]
           : baseCertificado.fechaCobro,
     };
+    const numGG = Number(gastosGenerales) || 0;
 
     updateAppData((prev) => ({
       ...prev,
@@ -704,6 +742,7 @@ export default function App() {
           })
         );
 
+        let ggAssigned = false;
         const updatedEntregables = proj.entregables.map((ent) => {
           let hasChanges = false;
           const updatedHitos = ent.hitos.map((h) => {
@@ -743,11 +782,14 @@ export default function App() {
                       c.id === docKey ||
                       `${c.nombre}_${c.fechaCobro || c.fechaPresentacion}` === docKey
                     ) {
+                      const ggVal = !ggAssigned ? numGG : 0;
+                      ggAssigned = true;
                       return {
                         ...c,
                         ...finalBaseCert,
                         grupo: c.grupo || docKey,
                         importe: actConfig.importe,
+                        gastosGenerales: ggVal,
                       };
                     }
                     return c;
@@ -756,11 +798,14 @@ export default function App() {
               }
             } else if (actConfig && actConfig.seleccionado && actConfig.importe > 0) {
               hasChanges = true;
+              const ggVal = !ggAssigned ? numGG : 0;
+              ggAssigned = true;
               const newCert: Certificado = {
                 ...finalBaseCert,
                 id: `cert_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
                 grupo: docKey,
                 importe: actConfig.importe,
+                gastosGenerales: ggVal,
               };
               return {
                 ...h,
@@ -774,12 +819,56 @@ export default function App() {
           return hasChanges ? { ...ent, hitos: updatedHitos } : ent;
         });
 
+        const updatedCertificadosGastos = {
+          ...(proj.certificadosGastos || {}),
+          [docKey]: numGG,
+        };
+
         return {
           ...proj,
           entregables: updatedEntregables,
+          certificadosGastos: updatedCertificadosGastos,
         };
       }),
     }));
+  };
+
+  const handleUpdateAvanceCortes = (empresaId: string, avances: AvanceCorteData[]) => {
+    updateAppData((prev) => ({
+      ...prev,
+      proyectos: prev.proyectos.map((proj) => {
+        if (proj.id !== currentProject.id) return proj;
+        return {
+          ...proj,
+          avanceCortes: {
+            ...(proj.avanceCortes || {}),
+            [empresaId]: avances,
+          },
+        };
+      }),
+    }));
+  };
+
+  const handleSetCorteActualFijado = (empresaId: string, fecha: string | null) => {
+    updateAppData((prev) => ({
+      ...prev,
+      proyectos: prev.proyectos.map((proj) => {
+        if (proj.id !== currentProject.id) return proj;
+        const currentFijados = { ...(proj.corteActualFijado || {}) };
+        if (!fecha) {
+          delete currentFijados[empresaId];
+        } else {
+          currentFijados[empresaId] = fecha;
+        }
+        return {
+          ...proj,
+          corteActualFijado: currentFijados,
+        };
+      }),
+    }));
+    if (fecha) {
+      handleSetCutoffDate(fecha);
+    }
   };
 
   return (
@@ -1071,6 +1160,10 @@ export default function App() {
               proyecto={currentProject}
               onUpdateFechasCorte={handleUpdateFechasCorte}
               onUpdateGastosGenerales={handleUpdateGastosGenerales}
+              onUpdateAvanceCortes={handleUpdateAvanceCortes}
+              onSetCorteActualFijado={handleSetCorteActualFijado}
+              selectedCutoffDate={currentCutoffDate}
+              onSelectCutoffDate={handleSetCutoffDate}
             />
           )}
 

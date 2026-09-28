@@ -56,15 +56,29 @@ export function getTodayString(): string {
 }
 
 /**
- * Obtiene la fecha de corte contractual más cercana a la fecha de referencia (por defecto hoy).
- * Encuentra el corte con menor distancia absoluta en días a hoy.
+ * Obtiene la fecha de corte contractual más cercana a la fecha de referencia (por defecto hoy)
+ * o la fecha que el usuario haya fijado manualmente como corte actual del proyecto.
  */
-export function getCorteActual(fechasCorte: string[], refDate?: string): string {
+export function getCorteActual(
+  fechasCorte: string[], 
+  refDate?: string, 
+  proyecto?: Proyecto, 
+  empresaId?: string
+): string {
   if (!fechasCorte || fechasCorte.length === 0) return '';
-  const ref = refDate ? normalizeDate(refDate) : getTodayString();
   const sorted = Array.from(new Set(fechasCorte.map(normalizeDate).filter(Boolean))).sort();
   if (sorted.length === 0) return '';
 
+  // 1. Si el usuario fijó manualmente un corte actual para esta empresa/proyecto, respetarlo
+  if (proyecto?.corteActualFijado) {
+    const fijado = (empresaId && proyecto.corteActualFijado[empresaId]) || Object.values(proyecto.corteActualFijado)[0];
+    if (fijado && sorted.includes(fijado)) {
+      return fijado;
+    }
+  }
+
+  // 2. Si no, calcular la fecha con menor distancia absoluta a la fecha de referencia (hoy)
+  const ref = refDate ? normalizeDate(refDate) : getTodayString();
   const refTime = new Date(ref).getTime();
 
   let closest = sorted[0];
@@ -118,17 +132,14 @@ export function getGastoPorEntregable(proyecto: Proyecto | undefined): number {
   return count > 0 ? totalGastos / count : 0;
 }
 
-export function getEntregableValorEfectivo(entregable: Entregable, proyecto: Proyecto | undefined): number {
-  const base = Number(entregable.valorTotal) || 0;
-  if (entregable.esCHO) return base;
-  const share = getGastoPorEntregable(proyecto);
-  return base + share;
+export function getEntregableValorEfectivo(entregable: Entregable, _proyecto?: Proyecto | undefined): number {
+  return Number(entregable.valorTotal) || 0;
 }
 
-export function getHitoValorEfectivo(entregable: Entregable, hito: Hito, proyecto: Proyecto | undefined): number {
-  const totalEfectivo = getEntregableValorEfectivo(entregable, proyecto);
+export function getHitoValorEfectivo(entregable: Entregable, hito: Hito, _proyecto?: Proyecto | undefined): number {
+  const totalBase = Number(entregable.valorTotal) || 0;
   const pct = Number(hito.porcentaje) || 0;
-  return Math.round((totalEfectivo * pct) / 100 * 100) / 100;
+  return Math.round((totalBase * pct) / 100 * 100) / 100;
 }
 
 export function getHitoPlannedDate(entregable: Entregable, hito: Hito): string {
@@ -539,11 +550,41 @@ export function computeCurvaS(
     });
   });
 
-  // Dynamic project baseline total from curve deliverables
-  const totalProyectoValor =
+  // Dynamic project baseline total from curve deliverables + Gastos Generales
+  const totalGastosGenerales = getTotalGastosGenerales(proyecto);
+  const totalEntregablesValor =
     proyecto.entregables
       .filter((e) => e.incluirCurva !== false)
-      .reduce((sum, e) => sum + getEntregableValorEfectivo(e, proyecto), 0) || 195684.0;
+      .reduce((sum, e) => sum + getEntregableValorEfectivo(e, proyecto), 0) || 148170.0;
+  const totalProyectoValor = totalEntregablesValor + totalGastosGenerales;
+
+  // Flatten avanceCortes to get manual planned percentages & gastos for each cutoff
+  const avanceMap = new Map<string, { pctPeriodo: number; gastosPeriodo: number }>();
+  if (proyecto.avanceCortes) {
+    Object.values(proyecto.avanceCortes).forEach((arr) => {
+      if (Array.isArray(arr)) {
+        arr.forEach((item) => {
+          const f = normalizeDate(item.fecha);
+          if (f) {
+            let pct = item.porcentajePlanificadoPeriodo;
+            let gastos = item.gastosPlanificadosPeriodo;
+            if (gastos === undefined && pct !== undefined && pct > 0 && totalGastosGenerales > 0) {
+              gastos = Math.round((totalGastosGenerales * (pct / 100)) * 100) / 100;
+            }
+            if (pct === undefined && gastos !== undefined && totalGastosGenerales > 0) {
+              pct = Math.round(((gastos / totalGastosGenerales) * 100) * 100) / 100;
+            }
+            avanceMap.set(f, {
+              pctPeriodo: pct || 0,
+              gastosPeriodo: gastos || 0,
+            });
+          }
+        });
+      }
+    });
+  }
+
+  const docs = getGroupedCertificates(proyecto);
 
   // Aggregate by cutoff periods
   const puntos: CurvaPunto[] = [];
@@ -555,10 +596,14 @@ export function computeCurvaS(
     const fechaActual = cortes[i];
     const fechaAnterior = i > 0 ? cortes[i - 1] : '0000-00-00';
 
-    // Plan in this slice (always computed from start to finish)
-    const planSlice = planItems
+    // Plan in this slice: milestones + manual planned gastos generales
+    const planSliceActs = planItems
       .filter((p) => p.fecha > fechaAnterior && p.fecha <= fechaActual)
       .reduce((sum, p) => sum + p.monto, 0);
+
+    const avanceItem = avanceMap.get(fechaActual);
+    const planSliceGG = avanceItem ? avanceItem.gastosPeriodo : 0;
+    const planSlice = planSliceActs + planSliceGG;
 
     planAcum += planSlice;
     const pctPlan = totalProyectoValor > 0 ? Math.min(100, (planAcum / totalProyectoValor) * 100) : 0;
@@ -567,13 +612,26 @@ export function computeCurvaS(
     const isWithinCutoff = fechaActual <= limitDate;
 
     if (isWithinCutoff) {
-      const certSlice = certItems
+      const certSliceActs = certItems
         .filter((c) => c.fechaCert > fechaAnterior && c.fechaCert <= fechaActual)
         .reduce((sum, c) => sum + c.importe, 0);
 
-      const cobradoSlice = certItems
+      // Gastos generales certified in docs for this period
+      const certDocsInPeriod = docs.filter(
+        (d) => d.fechaCobro > fechaAnterior && d.fechaCobro <= fechaActual
+      );
+      const certSliceGG = certDocsInPeriod.reduce((sum, d) => sum + (d.gastosGenerales || 0), 0);
+      const certSlice = certSliceActs + certSliceGG;
+
+      const cobradoSliceActs = certItems
         .filter((c) => (c.estado === 'Cobrado' || c.estado === 'Facturado') && c.fechaCobro > fechaAnterior && c.fechaCobro <= fechaActual)
         .reduce((sum, c) => sum + c.importe, 0);
+
+      const cobradoDocsInPeriod = certDocsInPeriod.filter(
+        (d) => d.estado === 'Cobrado' || d.estado === 'Facturado'
+      );
+      const cobradoSliceGG = cobradoDocsInPeriod.reduce((sum, d) => sum + (d.gastosGenerales || 0), 0);
+      const cobradoSlice = cobradoSliceActs + cobradoSliceGG;
 
       certAcum += certSlice;
       cobradoAcum += cobradoSlice;
@@ -836,6 +894,8 @@ export interface CertificadoDocumento {
   fechaPresentacion: string;
   fechaAprobacion: string;
   fechaCobro: string;
+  importeActividades: number;
+  gastosGenerales: number;
   importeTotal: number;
   estado: string;
   tipo: string;
@@ -868,6 +928,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
     fechaAprobacion: string;
     fechaCobro: string;
     importeTotal: number;
+    gastosGenerales: number;
     estado: string;
     tipo: string;
     observaciones: string;
@@ -880,6 +941,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
     const key = certAny.grupo || `${certificado.nombre}_${certificado.fechaCobro || certificado.fechaPresentacion}`;
     const valorHito = getHitoValorEfectivo(entregable, hito, proyecto);
     const importe = Number(certificado.importe) || 0;
+    const certGG = Number(certificado.gastosGenerales) || 0;
     const isCobrado = certificado.estado === 'Cobrado' || certificado.estado === 'Facturado';
 
     if (!groupsMap.has(key)) {
@@ -892,6 +954,7 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
         fechaAprobacion: normalizeDate(certificado.fechaAprobacion),
         fechaCobro: normalizeDate(certificado.fechaCobro) || normalizeDate(certificado.fechaPresentacion),
         importeTotal: 0,
+        gastosGenerales: certGG,
         estado: certificado.estado,
         tipo: certAny.tipo || 'normal',
         observaciones: certificado.observaciones || '',
@@ -901,6 +964,9 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
 
     const grp = groupsMap.get(key)!;
     grp.importeTotal += importe;
+    if (certGG > 0 && certGG > grp.gastosGenerales) {
+      grp.gastosGenerales = certGG;
+    }
     grp.actividades.push({
       codigo: entregable.codigo,
       descripcion: entregable.descripcion,
@@ -925,6 +991,17 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
     const codigoPrincipal = codigosUnicos[0] || '—';
     const otrosCodigosCount = Math.max(0, codigosUnicos.length - 1);
 
+    // Si hay monto de gastos generales registrado en proyecto.certificadosGastos para este grupo o número
+    const storedGG = 
+      Number(proyecto.certificadosGastos?.[doc.grupoKey]) ||
+      Number(proyecto.certificadosGastos?.[doc.numero]) ||
+      doc.gastosGenerales ||
+      0;
+
+    const importeActividades = Math.round(doc.importeTotal * 100) / 100;
+    const gastosGenerales = Math.round(storedGG * 100) / 100;
+    const importeTotal = Math.round((importeActividades + gastosGenerales) * 100) / 100;
+
     return {
       id: doc.grupoKey,
       grupoKey: doc.grupoKey,
@@ -937,7 +1014,9 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
       fechaPresentacion: doc.fechaPresentacion,
       fechaAprobacion: doc.fechaAprobacion,
       fechaCobro: doc.fechaCobro,
-      importeTotal: Math.round(doc.importeTotal * 100) / 100,
+      importeActividades,
+      gastosGenerales,
+      importeTotal,
       estado: doc.estado,
       tipo: doc.tipo,
       observaciones: doc.observaciones,
@@ -1017,19 +1096,29 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
     let docGastos = 0;
     let docBase = 0;
 
-    doc.actividades.forEach((act) => {
-      const ent = proyecto.entregables.find((e) => e.id === act.entregableId);
-      if (!ent) return;
-      const baseEnt = Number(ent.valorTotal) || 0;
-      const gastoEnt = ent.esCHO ? 0 : getGastoPorEntregable(proyecto);
-      const totalEnt = baseEnt + gastoEnt;
-      const ratioGasto = totalEnt > 0 ? gastoEnt / totalEnt : 0;
-      const ratioBase = totalEnt > 0 ? baseEnt / totalEnt : 0;
+    const hasExplicitGG = Boolean(
+      (proyecto.certificadosGastos && Object.keys(proyecto.certificadosGastos).length > 0) ||
+      docs.some((d) => d.gastosGenerales > 0)
+    );
 
-      const imp = Number(act.importe ?? act.cobrado ?? act.pendiente) || 0;
-      docGastos += imp * ratioGasto;
-      docBase += imp * ratioBase;
-    });
+    if (hasExplicitGG) {
+      docGastos = doc.gastosGenerales || 0;
+      docBase = doc.importeActividades;
+    } else {
+      doc.actividades.forEach((act) => {
+        const ent = proyecto.entregables.find((e) => e.id === act.entregableId);
+        if (!ent) return;
+        const baseEnt = Number(ent.valorTotal) || 0;
+        const gastoEnt = ent.esCHO ? 0 : getGastoPorEntregable(proyecto);
+        const totalEnt = baseEnt + gastoEnt;
+        const ratioGasto = totalEnt > 0 ? gastoEnt / totalEnt : 0;
+        const ratioBase = totalEnt > 0 ? baseEnt / totalEnt : 0;
+
+        const imp = Number(act.importe ?? act.cobrado ?? act.pendiente) || 0;
+        docGastos += imp * ratioGasto;
+        docBase += imp * ratioBase;
+      });
+    }
 
     if (doc.estado === 'Cobrado' || doc.estado === 'Facturado') {
       totalGastosCobrados += docGastos;

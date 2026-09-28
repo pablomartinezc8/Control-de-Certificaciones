@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
-  Receipt
+  Receipt,
+  DollarSign
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -366,7 +367,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                                 )}
                               </span>
                             </button>
-                            <div>
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => toggleExpand(doc.id)}
@@ -384,6 +385,13 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                                     : `${doc.actividades.length} actividades • Ver desglose`}
                                 </span>
                               </button>
+
+                              {doc.gastosGenerales > 0 && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  <DollarSign className="w-2.5 h-2.5" />
+                                  <span>+{formatCurrency(doc.gastosGenerales)} GG</span>
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -531,6 +539,34 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                                       </tr>
                                     ))}
                                   </tbody>
+                                  {doc.gastosGenerales > 0 && (
+                                    <tfoot className="bg-purple-50/60 dark:bg-purple-950/40 border-t border-purple-200 dark:border-purple-800 text-xs">
+                                      <tr>
+                                        <td colSpan={3} className="py-2 px-3 font-semibold text-purple-900 dark:text-purple-300">
+                                          Subtotal Actividades de Ingeniería:
+                                        </td>
+                                        <td colSpan={2} className="py-2 px-3 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                                          {formatCurrency(doc.importeActividades)}
+                                        </td>
+                                      </tr>
+                                      <tr>
+                                        <td colSpan={3} className="py-2 px-3 font-semibold text-purple-900 dark:text-purple-300">
+                                          Gastos Generales del Proyecto facturados en este certificado:
+                                        </td>
+                                        <td colSpan={2} className="py-2 px-3 text-right font-mono font-bold text-purple-700 dark:text-purple-300">
+                                          +{formatCurrency(doc.gastosGenerales)}
+                                        </td>
+                                      </tr>
+                                      <tr className="border-t border-purple-300 dark:border-purple-700 font-bold bg-purple-100/60 dark:bg-purple-950/80">
+                                        <td colSpan={3} className="py-2 px-3 uppercase tracking-wider text-purple-950 dark:text-white">
+                                          Total Facturado en este Documento:
+                                        </td>
+                                        <td colSpan={2} className="py-2 px-3 text-right font-mono text-emerald-600 dark:text-emerald-400 text-sm">
+                                          {formatCurrency(doc.importeTotal)}
+                                        </td>
+                                      </tr>
+                                    </tfoot>
+                                  )}
                                 </table>
                               </div>
                             </div>

@@ -8,6 +8,7 @@ export interface Certificado {
   fechaAprobacion: string;
   fechaCobro: string;
   importe: number;
+  gastosGenerales?: number;
   tipo: string;
   estado: 'Cobrado' | 'Aprobado' | 'Presentado' | 'Pendiente' | string;
   observaciones?: string;
@@ -67,6 +68,20 @@ export interface GastoActividad {
   pesos: Record<string, number>;
 }
 
+export interface AvanceCorteData {
+  fecha: string;
+  porcentajePlanificado?: number; // % avance planificado acumulado manual (ej. 10, 22, 35...)
+  porcentajePlanificadoPeriodo?: number; // % avance planificado del período manual (ej. 10, 12, 13...)
+  tareasPlanificadas?: number;    // cantidad de tareas proyectadas/planificadas del período
+  tareasPlanificadasAcum?: number; // cantidad de tareas proyectadas acumuladas
+  gastosPlanificadosPeriodo?: number; // gastos generales planificados del período ($ USD)
+  gastosPlanificadosAcum?: number;    // gastos generales planificados acumulados ($ USD)
+  porcentajeReal?: number;        // % avance real acumulado manual o calculado
+  tareasReales?: number;          // cantidad de tareas reales ejecutadas
+  porcentajeOutlook?: number;     // pronóstico outlook %
+  observaciones?: string;
+}
+
 export interface ProyectoConfig {
   tolerancia?: number;
   [key: string]: any;
@@ -81,6 +96,10 @@ export interface Proyecto {
   gastosDivididos?: Record<string, number[]>;
   config?: ProyectoConfig;
   gastosActividad?: Record<string, GastoActividad[]>;
+  totalTareasProyecto?: number; // total de tareas del proyecto (ej. 33)
+  avanceCortes?: Record<string, AvanceCorteData[]>; // empresaId -> lista de avances por corte
+  certificadosGastos?: Record<string, number>; // docKey -> monto de gastos generales cobrado en ese certificado
+  corteActualFijado?: Record<string, string>; // empresaId -> fecha fija establecida manualmente como corte actual
 }
 
 export interface AppData {
