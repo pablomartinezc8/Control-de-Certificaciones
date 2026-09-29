@@ -123,7 +123,7 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
     const clampedPct = Math.max(0, Math.min(100, isNaN(valorPct) ? 0 : valorPct));
 
     // Update map
-    const existing = avanceMap.get(fecha) || { fecha };
+    const existing: AvanceCorteData = avanceMap.get(fecha) || { fecha };
     const updatedItem: AvanceCorteData = {
       ...existing,
       fecha,
@@ -131,13 +131,13 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
       gastosPlanificadosPeriodo: Math.round((totalGenerales * (clampedPct / 100)) * 100) / 100,
     };
 
-    const newMap = new Map(avanceMap);
+    const newMap = new Map<string, AvanceCorteData>(avanceMap);
     newMap.set(fecha, updatedItem);
 
     // Recalcular acumulados en orden cronológico
     let acum = 0;
     const resultList: AvanceCorteData[] = fechas.map((f) => {
-      const item = newMap.get(f) || { fecha: f, porcentajePlanificadoPeriodo: 0 };
+      const item: AvanceCorteData = newMap.get(f) || { fecha: f, porcentajePlanificadoPeriodo: 0 };
       const pct = Number(item.porcentajePlanificadoPeriodo) || 0;
       acum += pct;
       const gastosPeriodo = Math.round((totalGenerales * (pct / 100)) * 100) / 100;
@@ -159,7 +159,7 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
   const handleUpdateTareasPeriodo = (fecha: string, tareas: number | '') => {
     if (!onUpdateAvanceCortes) return;
     const numTareas = tareas === '' ? undefined : Math.max(0, Number(tareas));
-    const existing = avanceMap.get(fecha) || { fecha };
+    const existing: AvanceCorteData = avanceMap.get(fecha) || { fecha };
 
     const updatedItem: AvanceCorteData = {
       ...existing,
@@ -167,11 +167,11 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
       tareasPlanificadas: numTareas,
     };
 
-    const newMap = new Map(avanceMap);
+    const newMap = new Map<string, AvanceCorteData>(avanceMap);
     newMap.set(fecha, updatedItem);
 
-    const resultList: AvanceCorteData[] = fechas.map((f) => {
-      const item = newMap.get(f) || { fecha: f };
+    const resultList: AvanceCorteData[] = fechas.map((f): AvanceCorteData => {
+      const item: AvanceCorteData = newMap.get(f) || { fecha: f };
       return item;
     });
 
