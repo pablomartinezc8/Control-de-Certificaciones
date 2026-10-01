@@ -337,6 +337,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           selectedCutoffDateProp={selectedCutoffDate}
           onCutoffDateChange={handleDateChange}
           showDownloadButton={false}
+          hideCutoffSelector={true}
         />
       </div>
 
@@ -406,12 +407,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <span 
                           className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800"
-                          title={v.motivoAtraso || `${Math.abs(v.diasDiferencia)} días de atraso`}
+                          title={v.motivoAtraso || `${Math.abs(v.diasDiferencia)} días de atraso respecto al corte activo (${selectedCutoffDate})`}
                         >
-                          {Math.abs(v.diasDiferencia)} días atraso
+                          {Math.abs(v.diasDiferencia)} {Math.abs(v.diasDiferencia) === 1 ? 'día atraso' : 'días atraso'}
                         </span>
                         {v.motivoAtraso && (
-                          <div className="text-[9px] text-rose-600 truncate max-w-[140px] mx-auto mt-0.5" title={v.motivoAtraso}>
+                          <div className="text-[9px] text-rose-600 truncate max-w-[150px] mx-auto mt-0.5" title={v.motivoAtraso}>
                             {v.motivoAtraso}
                           </div>
                         )}

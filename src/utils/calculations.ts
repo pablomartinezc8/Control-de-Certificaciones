@@ -56,6 +56,23 @@ export function getTodayString(): string {
 }
 
 /**
+ * Calcula la diferencia exacta en días entre dos fechas (dateA - dateB)
+ * de forma matemáticamente exacta usando UTC a medianoche para evitar desfases horarios.
+ */
+export function getDiffDaysExact(dateA: string, dateB: string): number {
+  const normA = normalizeDate(dateA);
+  const normB = normalizeDate(dateB);
+  if (!normA || !normB) return 0;
+  const partsA = normA.split('-').map(Number);
+  const partsB = normB.split('-').map(Number);
+  if (partsA.length !== 3 || partsB.length !== 3 || partsA.some(isNaN) || partsB.some(isNaN)) return 0;
+  const utcA = Date.UTC(partsA[0], partsA[1] - 1, partsA[2]);
+  const utcB = Date.UTC(partsB[0], partsB[1] - 1, partsB[2]);
+  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+  return Math.round((utcA - utcB) / MS_PER_DAY);
+}
+
+/**
  * Obtiene la fecha de corte contractual más cercana a la fecha de referencia (por defecto hoy)
  * o la fecha que el usuario haya fijado manualmente como corte actual del proyecto.
  */
@@ -333,12 +350,46 @@ export function computeProjectMetrics(
   });
 
   const baseTotal = totalPlanificadoProyecto || totalContratado || 1;
-  const porcentajePlanificadoALaFecha = Math.round(((planificadoALaFecha / baseTotal) * 100) * 10) / 10;
+  let porcentajePlanificadoALaFecha = Math.round(((planificadoALaFecha / baseTotal) * 100) * 10) / 10;
 
   const valorTotalTaging = totalContratado + totalGastosGenerales;
-  const certificadoTaging = totalCertificado;
-  const saldoPendienteTaging = Math.max(0, valorTotalTaging - certificadoTaging);
-  const porcentajeCertificadoTaging = valorTotalTaging > 0 ? (certificadoTaging / valorTotalTaging) * 100 : 0;
+
+  // Curva S y puntos de control sincronizados (Fuente unificada de la verdad)
+  const allCortesTmp: string[] = [];
+  if (proyecto.fechasCorte) {
+    Object.values(proyecto.fechasCorte).forEach((list) => {
+      if (Array.isArray(list)) allCortesTmp.push(...list);
+    });
+  }
+  const cortesTmp = Array.from(new Set(allCortesTmp.map(normalizeDate).filter(Boolean))).sort();
+  const curCutoff = fechaCorteSeleccionada || getCorteActual(cortesTmp) || getTodayString();
+  const puntosCurva = computeCurvaS(proyecto, curCutoff);
+  const puntoAlCorte = puntosCurva.find((p) => p.fecha === curCutoff) 
+    || puntosCurva.filter((p) => p.fecha <= curCutoff).slice(-1)[0]
+    || puntosCurva[0];
+
+  // Unificación de la fuente: Si puntoAlCorte tiene datos consolidados al corte, usamos sus valores exactos
+  let certificadoTaging = totalCertificado;
+  let porcentajeCertificadoTaging = valorTotalTaging > 0 ? (certificadoTaging / valorTotalTaging) * 100 : 0;
+
+  if (puntoAlCorte && puntoAlCorte.certificadoAcumulado !== null) {
+    totalCertificado = puntoAlCorte.certificadoAcumulado;
+    certificadoTaging = puntoAlCorte.certificadoAcumulado;
+    porcentajeCertificadoTaging = puntoAlCorte.porcentajeCertAcumulado !== null 
+      ? puntoAlCorte.porcentajeCertAcumulado 
+      : (valorTotalTaging > 0 ? (certificadoTaging / valorTotalTaging) * 100 : 0);
+  }
+
+  if (puntoAlCorte && puntoAlCorte.cobradoAcumulado !== null) {
+    totalCobrado = puntoAlCorte.cobradoAcumulado;
+  }
+
+  if (puntoAlCorte && puntoAlCorte.planificadoAcumulado !== null) {
+    planificadoALaFecha = puntoAlCorte.planificadoAcumulado;
+    if (puntoAlCorte.porcentajePlanAcumulado !== null) {
+      porcentajePlanificadoALaFecha = puntoAlCorte.porcentajePlanAcumulado;
+    }
+  }
 
   // Invariante de coherencia: lo cobrado nunca puede ser superior a lo certificado
   totalCobrado = Math.min(totalCobrado, totalCertificado);
@@ -353,24 +404,11 @@ export function computeProjectMetrics(
       }).length
     : groupedCerts.length;
 
+  const saldoPendienteTaging = Math.max(0, valorTotalTaging - certificadoTaging);
   const totalPendienteCobro = Math.max(0, totalCertificado - totalCobrado);
-  const saldoPorCertificar = Math.max(0, totalContratado - totalCertificado);
-  const porcentajeCertificado = totalContratado > 0 ? (totalCertificado / totalContratado) * 100 : 0;
-  const porcentajeCobrado = totalContratado > 0 ? (totalCobrado / totalContratado) * 100 : 0;
-
-  // Curva S y puntos de control sincronizados
-  const allCortesTmp: string[] = [];
-  if (proyecto.fechasCorte) {
-    Object.values(proyecto.fechasCorte).forEach((list) => {
-      if (Array.isArray(list)) allCortesTmp.push(...list);
-    });
-  }
-  const cortesTmp = Array.from(new Set(allCortesTmp.map(normalizeDate).filter(Boolean))).sort();
-  const curCutoff = fechaCorteSeleccionada || getCorteActual(cortesTmp) || getTodayString();
-  const puntosCurva = computeCurvaS(proyecto, curCutoff);
-  const puntoAlCorte = puntosCurva.find((p) => p.fecha === curCutoff) 
-    || puntosCurva.filter((p) => p.fecha <= curCutoff).slice(-1)[0]
-    || puntosCurva[0];
+  const saldoPorCertificar = Math.max(0, valorTotalTaging - totalCertificado);
+  const porcentajeCertificado = porcentajeCertificadoTaging;
+  const porcentajeCobrado = valorTotalTaging > 0 ? (totalCobrado / valorTotalTaging) * 100 : 0;
 
   // Calculo de desvío dinámico sincronizado con la Curva S
   let desvioAcumulado = 0;
@@ -617,9 +655,11 @@ export function computeCurvaS(
         .reduce((sum, c) => sum + c.importe, 0);
 
       // Gastos generales certified in docs for this period
-      const certDocsInPeriod = docs.filter(
-        (d) => d.fechaCobro > fechaAnterior && d.fechaCobro <= fechaActual
-      );
+      const certDocsInPeriod = docs.filter((d) => {
+        const dDates = [normalizeDate(d.fechaPresentacion), normalizeDate(d.fechaAprobacion), normalizeDate(d.fechaCobro)].filter(Boolean) as string[];
+        const dCert = dDates.length > 0 ? [...dDates].sort()[0] : (normalizeDate(d.fechaPresentacion) || normalizeDate(d.fechaCobro) || '');
+        return dCert > fechaAnterior && dCert <= fechaActual;
+      });
       const certSliceGG = certDocsInPeriod.reduce((sum, d) => sum + (d.gastosGenerales || 0), 0);
       const certSlice = certSliceActs + certSliceGG;
 
@@ -627,9 +667,11 @@ export function computeCurvaS(
         .filter((c) => (c.estado === 'Cobrado' || c.estado === 'Facturado') && c.fechaCobro > fechaAnterior && c.fechaCobro <= fechaActual)
         .reduce((sum, c) => sum + c.importe, 0);
 
-      const cobradoDocsInPeriod = certDocsInPeriod.filter(
-        (d) => d.estado === 'Cobrado' || d.estado === 'Facturado'
-      );
+      const cobradoDocsInPeriod = docs.filter((d) => {
+        const isCobrado = d.estado === 'Cobrado' || d.estado === 'Facturado';
+        const dCobro = normalizeDate(d.fechaCobro) || normalizeDate(d.fechaPresentacion) || '';
+        return isCobrado && dCobro > fechaAnterior && dCobro <= fechaActual;
+      });
       const cobradoSliceGG = cobradoDocsInPeriod.reduce((sum, d) => sum + (d.gastosGenerales || 0), 0);
       const cobradoSlice = cobradoSliceActs + cobradoSliceGG;
 
@@ -784,38 +826,37 @@ export function getVencimientosHitos(
         // Corte objetivo: primera fecha de corte posterior o igual a la fecha prevista de la actividad
         const corteObjetivo = cortes.find((c) => c >= fPlan) || fPlan;
 
-        // Se emitió ya un certificado en o posterior a la fecha prevista O al corte objetivo donde la actividad no estuvo incluida
-        const certPostPlanEmitido = certDates.some((cd) => cd >= fPlan);
-        const certPostCorteEmitido = certDates.some((cd) => cd >= corteObjetivo);
+        // Comparación estricta y matemáticamente exacta respecto a la fecha de corte seleccionada / referencia
+        // Días de diferencia entre fecha de referencia (corte activo) y la fecha prevista/corte
+        const diasDesdePlan = getDiffDaysExact(refDateStr, fPlan); // > 0 significa fPlan en el pasado (días de atraso exactos)
+        const diasDesdeCorte = getDiffDaysExact(refDateStr, corteObjetivo); // > 0 significa corte objetivo en el pasado
 
-        // El corte objetivo ya venció respecto a la fecha de corte seleccionada / referencia
-        const cutoffPassed = corteObjetivo < refDateStr;
+        // Una actividad está atrasada si su fecha prevista o su corte objetivo es anterior o igual a la fecha de corte seleccionada
+        const esAtrasado = fPlan < refDateStr || corteObjetivo <= refDateStr;
 
-        // Una actividad está ATRASADA si:
-        // 1) Su corte ya venció respecto a la fecha de referencia
-        // 2) O ya se emitió un certificado en fecha >= fPlan (o >= corte) sin incluir esta actividad
-        const esAtrasado = cutoffPassed || certPostPlanEmitido || certPostCorteEmitido;
+        let diffDays = 0;
+        let motivoAtraso: string | undefined = undefined;
 
-        // Días de diferencia:
-        // Si está atrasado, calculamos los días de atraso respecto a la fecha de la actividad (o corte vencido)
-        const planTime = new Date(fPlan).getTime();
-        const diffDays = esAtrasado 
-          ? Math.min(Math.round((planTime - refTime) / (1000 * 60 * 60 * 24)), -1)
-          : Math.max(0, Math.round((new Date(corteObjetivo).getTime() - refTime) / (1000 * 60 * 60 * 24)));
+        if (esAtrasado) {
+          // Días exactos de atraso: estrictamente entre la fecha de corte activa y la fecha prevista/corte
+          const diasAtrasoExactos = Math.max(1, diasDesdePlan > 0 ? diasDesdePlan : (diasDesdeCorte > 0 ? diasDesdeCorte : 1));
+          diffDays = -diasAtrasoExactos;
+
+          if (corteObjetivo < refDateStr) {
+            motivoAtraso = `Corte planificado ${formatShortDate(corteObjetivo)} vencido (${diasAtrasoExactos}d de atraso)`;
+          } else if (fPlan < refDateStr) {
+            motivoAtraso = `Fecha prevista ${formatShortDate(fPlan)} anterior al corte activo (${diasAtrasoExactos}d de atraso)`;
+          } else {
+            motivoAtraso = `Corte activo ${formatShortDate(refDateStr)} sin certificar`;
+          }
+        } else {
+          // Actividad futura: días restantes matemáticamente exactos hasta la fecha prevista
+          const diasRestantes = Math.max(0, getDiffDaysExact(fPlan, refDateStr));
+          diffDays = diasRestantes;
+        }
 
         let estado = 'Sin certificar';
         if (certSum > 0) estado = 'Parcialmente certificado';
-
-        let motivoAtraso: string | undefined = undefined;
-        if (esAtrasado) {
-          if (cutoffPassed) {
-            motivoAtraso = `Corte ${formatShortDate(corteObjetivo)} vencido sin certificar`;
-          } else if (certPostPlanEmitido) {
-            motivoAtraso = `No incluida en certificado emitido tras su fecha prevista (${formatShortDate(fPlan)})`;
-          } else if (certPostCorteEmitido) {
-            motivoAtraso = `No incluida en certificado emitido del corte`;
-          }
-        }
 
         const item: VencimientoHito = {
           id: `${e.id}_${h.id}`,

@@ -107,6 +107,9 @@ export const FechasCorteView: React.FC<FechasCorteViewProps> = ({
 
   // Corte actual activo
   const corteActualActivo = useMemo(() => {
+    if (proyecto.corteActualFijado?.[activeEmpresa] && fechas.includes(proyecto.corteActualFijado[activeEmpresa])) {
+      return proyecto.corteActualFijado[activeEmpresa];
+    }
     if (selectedCutoffDate && fechas.includes(selectedCutoffDate)) {
       return selectedCutoffDate;
     }

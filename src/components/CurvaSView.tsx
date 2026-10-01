@@ -34,6 +34,7 @@ interface CurvaSViewProps {
   selectedCutoffDateProp?: string;
   onCutoffDateChange?: (date: string) => void;
   showDownloadButton?: boolean;
+  hideCutoffSelector?: boolean;
 }
 
 export const CurvaSView: React.FC<CurvaSViewProps> = ({
@@ -41,6 +42,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
   selectedCutoffDateProp,
   onCutoffDateChange,
   showDownloadButton = true,
+  hideCutoffSelector = false,
 }) => {
   const [viewMode, setViewMode] = useState<'porcentaje' | 'monto'>('porcentaje');
   const [downloadingImage, setDownloadingImage] = useState(false);
@@ -262,37 +264,49 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
             </p>
           </div>
 
-          {/* Selector de Fecha de Corte Activa */}
+          {/* Selector de Fecha de Corte Activa o Indicador Sincronizado */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-              <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Corte de Control Real
+            {hideCutoffSelector ? (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/90 rounded-xl px-3 py-1.5 text-xs text-slate-700">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="text-[11px] font-medium">
+                  Corte: <strong className="text-slate-900 font-mono">{activeCutoffDate}</strong>
                 </span>
-                <select
-                  value={activeCutoffDate}
-                  onChange={(e) => handleSelectDate(e.target.value)}
-                  className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-1"
-                >
-                  {todasLasFechasCorte.map((f) => (
-                    <option key={f} value={f}>
-                      {f} {f === defaultActualDate ? '(Actual)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {activeCutoffDate !== defaultActualDate && (
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDate(defaultActualDate)}
-                    className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline font-semibold text-left"
-                    title={`Restablecer a la fecha de corte actual (${defaultActualDate})`}
-                  >
-                    Volver a actual
-                  </button>
-                )}
+                <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200/60 uppercase tracking-wide">
+                  Sincronizado
+                </span>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+                <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Corte de Control Real
+                  </span>
+                  <select
+                    value={activeCutoffDate}
+                    onChange={(e) => handleSelectDate(e.target.value)}
+                    className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer pr-1"
+                  >
+                    {todasLasFechasCorte.map((f) => (
+                      <option key={f} value={f}>
+                        {f} {f === defaultActualDate ? '(Actual)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {activeCutoffDate !== defaultActualDate && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectDate(defaultActualDate)}
+                      className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline font-semibold text-left"
+                      title={`Restablecer a la fecha de corte actual (${defaultActualDate})`}
+                    >
+                      Volver a actual
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Controles de Vista y Exportación */}
             <div id="curva-export-controls" className="flex items-center gap-2">
@@ -533,9 +547,14 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {puntosCurva.map((p, idx) => {
+              {puntosCurva.map((p) => {
                 const isSelected = p.fecha === activeCutoffDate;
                 const isPastCutoff = p.fecha > activeCutoffDate;
+                const certVal = p.certificadoAcumulado !== null ? p.certificadoAcumulado : null;
+                const cobradoVal = p.cobradoAcumulado !== null ? p.cobradoAcumulado : null;
+                const pendienteFacturar = (certVal !== null && cobradoVal !== null) 
+                  ? Math.max(0, Math.round((certVal - cobradoVal) * 100) / 100) 
+                  : 0;
 
                 return (
                   <tr
@@ -575,23 +594,55 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                       {p.porcentajeCertAcumulado !== null ? `${p.porcentajeCertAcumulado.toFixed(1)}%` : '—'}
                     </td>
 
-                    <td className="py-2.5 px-3 text-right font-mono text-purple-700">
-                      {p.cobradoAcumulado !== null ? formatCurrency(p.cobradoAcumulado) : '—'}
+                    <td className="py-2.5 px-3 text-right font-mono">
+                      {p.cobradoAcumulado !== null ? (
+                        <div>
+                          <span className="text-purple-700 font-semibold">{formatCurrency(p.cobradoAcumulado)}</span>
+                          {pendienteFacturar > 0.01 && (
+                            <div className="mt-0.5">
+                              <span 
+                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 whitespace-nowrap"
+                                title={`Monto certificado pendiente de facturación: ${formatCurrency(pendienteFacturar)}`}
+                              >
+                                Pend: {formatCurrency(pendienteFacturar)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      {isSelected ? (
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                          Corte Actual
-                        </span>
-                      ) : isPastCutoff ? (
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 text-[10px]">
-                          Proyectado
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px]">
-                          Histórico
-                        </span>
-                      )}
+                      <div className="flex flex-col items-center gap-1">
+                        {isSelected ? (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                            Corte Actual
+                          </span>
+                        ) : isPastCutoff ? (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 text-[10px]">
+                            Proyectado
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px]">
+                            Histórico
+                          </span>
+                        )}
+
+                        {certVal !== null && pendienteFacturar > 0.01 && (
+                          <span 
+                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[9px] font-bold border border-amber-300 whitespace-nowrap"
+                            title={`Certificado (${formatCurrency(certVal)}) superior a lo facturado (${formatCurrency(cobradoVal || 0)}). Pendiente: ${formatCurrency(pendienteFacturar)}`}
+                          >
+                            Pend. Facturación
+                          </span>
+                        )}
+                        {certVal !== null && certVal > 0 && pendienteFacturar <= 0.01 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-medium border border-emerald-200/60 whitespace-nowrap">
+                            100% Facturado
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
