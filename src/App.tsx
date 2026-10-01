@@ -833,6 +833,44 @@ export default function App() {
     }));
   };
 
+  const handleRenameCertificadoDocumento = (docKey: string, nuevoNombre: string, nuevoNumero: string) => {
+    const cleanNombre = nuevoNombre.trim();
+    const cleanNumero = nuevoNumero.trim();
+
+    updateAppData((prev) => ({
+      ...prev,
+      proyectos: prev.proyectos.map((proj) => {
+        if (proj.id !== currentProject.id) return proj;
+
+        const updatedEntregables = proj.entregables.map((ent) => ({
+          ...ent,
+          hitos: ent.hitos.map((h) => ({
+            ...h,
+            certificados: h.certificados.map((c) => {
+              if (
+                c.grupo === docKey ||
+                c.id === docKey ||
+                `${c.nombre}_${c.fechaCobro || c.fechaPresentacion}` === docKey
+              ) {
+                return {
+                  ...c,
+                  nombre: cleanNombre || (cleanNumero ? `Certificado N° ${cleanNumero}` : c.nombre),
+                  numero: cleanNumero || c.numero,
+                };
+              }
+              return c;
+            }),
+          })),
+        }));
+
+        return {
+          ...proj,
+          entregables: updatedEntregables,
+        };
+      }),
+    }));
+  };
+
   const handleUpdateAvanceCortes = (empresaId: string, avances: AvanceCorteData[]) => {
     updateAppData((prev) => ({
       ...prev,
@@ -1149,6 +1187,7 @@ export default function App() {
                 setIsCertificadoModalOpen(true);
               }}
               onEditCertificadoDocumento={handleOpenEditDocumento}
+              onRenameCertificadoDocumento={handleRenameCertificadoDocumento}
               onDeleteCertificado={handleDeleteCertificado}
               onDeleteCertificadoDocumento={handleDeleteCertificadoDocumento}
               onUpdateCertificadoStatus={handleUpdateCertificadoStatus}

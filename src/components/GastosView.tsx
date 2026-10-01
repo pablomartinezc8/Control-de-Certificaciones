@@ -568,7 +568,9 @@ export const GastosView: React.FC<GastosViewProps> = ({ proyecto, onUpdateGastos
                                   </span>
                                   <div>
                                     <div className="font-bold text-slate-900">
-                                      Cert. #{cert.numero} {cert.nombre && cert.nombre !== cert.numero ? `— ${cert.nombre}` : ''}
+                                      {cert.nombre && cert.nombre !== cert.numero
+                                        ? (cert.nombre.toLowerCase().startsWith('cert') ? cert.nombre : `Certificado N° ${cert.numero} — ${cert.nombre}`)
+                                        : `Certificado N° ${cert.numero}`}
                                     </div>
                                     <div className="text-[11px] text-blue-600 font-medium">
                                       {acts.length === 1 ? '1 actividad • Ver desglose' : `${acts.length} actividades • Ver desglose`}

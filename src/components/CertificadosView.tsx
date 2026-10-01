@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Eye,
   Receipt,
-  DollarSign
+  DollarSign,
+  X
 } from 'lucide-react';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -32,6 +33,11 @@ interface CertificadosViewProps {
     hitoId: string;
   }) => void;
   onEditCertificadoDocumento?: (doc: CertificadoDocumento) => void;
+  onRenameCertificadoDocumento?: (
+    docKey: string,
+    nuevoNombre: string,
+    nuevoNumero: string
+  ) => void;
   onDeleteCertificado: (entregableId: string, hitoId: string, certId: string) => void;
   onDeleteCertificadoDocumento?: (doc: CertificadoDocumento) => void;
   onUpdateCertificadoStatus: (
@@ -47,6 +53,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
   onOpenAddCertificado,
   onEditCertificado,
   onEditCertificadoDocumento,
+  onRenameCertificadoDocumento,
   onDeleteCertificado,
   onDeleteCertificadoDocumento,
   onUpdateCertificadoStatus,
@@ -54,6 +61,16 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedDocs, setExpandedDocs] = useState<Record<string, boolean>>({});
+
+  // Quick rename modal state
+  const [renamingDoc, setRenamingDoc] = useState<{
+    id: string;
+    grupoKey: string;
+    nombre: string;
+    numero: string;
+  } | null>(null);
+  const [renameNombre, setRenameNombre] = useState('');
+  const [renameNumero, setRenameNumero] = useState('');
 
   // Confirmation modal state
   const [deleteTarget, setDeleteTarget] = useState<CertificadoDocumento | null>(null);
@@ -126,9 +143,8 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
   const exportCertificatesCSV = () => {
     const headers = [
       'Item',
-      'Codigo_Principal',
-      'Nombre_Certificado',
       'Numero',
+      'Nombre_Certificado',
       'Orden_Compra',
       'Tipo',
       'Importe_Total_USD',
@@ -141,9 +157,8 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
 
     const rows = docs.map((d) => [
       d.item,
-      `"${d.codigoPrincipal}"`,
-      `"${d.nombre}"`,
       `"${d.numero}"`,
+      `"${d.nombre}"`,
       `"${d.ordenCompra}"`,
       `"${d.tipo}"`,
       d.importeTotal,
@@ -305,8 +320,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold uppercase tracking-wider">
                 <th className="py-3 px-3 w-10 text-center">#</th>
-                <th className="py-3 px-3">CÓDIGO</th>
-                <th className="py-3 px-3">DESCRIPCIÓN</th>
+                <th className="py-3 px-3">CERTIFICADO / NOMBRE</th>
                 <th className="py-3 px-3 text-center">TIPO</th>
                 <th className="py-3 px-3 text-right">MONTO</th>
                 <th className="py-3 px-3 text-center">ESTADO</th>
@@ -319,7 +333,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-200">
               {filteredDocs.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No se encontraron certificados registrados.
                   </td>
                 </tr>
@@ -335,45 +349,63 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                           {doc.item}
                         </td>
 
-                        {/* CÓDIGO */}
-                        <td className="py-3 px-3 font-mono font-medium text-slate-900 dark:text-white whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-blue-600 dark:text-cyan-400 font-bold">
-                              {doc.codigoPrincipal}
-                            </span>
-                            {doc.otrosCodigosCount > 0 && (
-                              <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-cyan-300 px-1.5 py-0.5 rounded">
-                                +{doc.otrosCodigosCount}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* DESCRIPCIÓN & BOTÓN VER DETALLE */}
+                        {/* CERTIFICADO / NOMBRE */}
                         <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
                           <div className="flex flex-col gap-1">
-                            <button
-                              type="button"
-                              onClick={() => toggleExpand(doc.id)}
-                              className="flex items-center gap-1.5 text-left group hover:text-blue-600 dark:hover:text-cyan-400 transition-colors cursor-pointer"
-                              title={isExpanded ? "Ocultar detalle de lo certificado" : "Ver detalle de lo certificado"}
-                            >
-                              <span className="font-semibold">{doc.nombre}</span>
-                              <span className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors p-0.5 rounded">
-                                {isExpanded ? (
-                                  <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
-                                ) : (
-                                  <ChevronRight className="w-3.5 h-3.5" />
-                                )}
+                            <div className="flex items-center gap-2">
+                              {/* Pill con Número del Certificado */}
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-cyan-300 border border-blue-200 dark:border-blue-800 font-mono shrink-0">
+                                N° {doc.numero || doc.item}
                               </span>
-                            </button>
-                            <div className="flex flex-wrap items-center gap-1.5">
+
+                              {/* Nombre / Título del Certificado */}
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(doc.id)}
+                                className="flex items-center gap-1.5 text-left group hover:text-blue-600 dark:hover:text-cyan-400 transition-colors cursor-pointer"
+                                title={isExpanded ? "Ocultar detalle de lo certificado" : "Ver detalle de lo certificado"}
+                              >
+                                <span className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-cyan-400">
+                                  {doc.nombre || `Certificado N° ${doc.numero || doc.item}`}
+                                </span>
+                                <span className="text-slate-400 group-hover:text-blue-600 dark:group-hover:text-cyan-400 transition-colors p-0.5 rounded">
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
+                                  ) : (
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  )}
+                                </span>
+                              </button>
+
+                              {/* Botón rápido para renombrar / editar */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenamingDoc({
+                                    id: doc.id,
+                                    grupoKey: doc.grupoKey || doc.id,
+                                    nombre: doc.nombre || `Certificado N° ${doc.numero || doc.item}`,
+                                    numero: doc.numero || String(doc.item),
+                                  });
+                                  setRenameNombre(doc.nombre || `Certificado N° ${doc.numero || doc.item}`);
+                                  setRenameNumero(doc.numero || String(doc.item));
+                                }}
+                                className="p-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors opacity-70 hover:opacity-100"
+                                title="Cambiar nombre o número para distinguir este certificado"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Desglose de actividades, OC y Gastos Generales */}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                               <button
                                 type="button"
                                 onClick={() => toggleExpand(doc.id)}
                                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
                                   isExpanded
-                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-cyan-200'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-cyan-200 font-semibold'
                                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-700'
                                 }`}
                                 title="Ver detalles de los entregables e hitos certificados"
@@ -385,6 +417,12 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                                     : `${doc.actividades.length} actividades • Ver desglose`}
                                 </span>
                               </button>
+
+                              {doc.ordenCompra && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono">
+                                  OC: {doc.ordenCompra}
+                                </span>
+                              )}
 
                               {doc.gastosGenerales > 0 && (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
@@ -491,7 +529,7 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
                       {/* Expandable sub-row with activities - available for all certificates */}
                       {isExpanded && (
                         <tr className="bg-slate-50/90 dark:bg-slate-900/90 border-y border-slate-200 dark:border-slate-800">
-                          <td colSpan={10} className="p-4 pl-8 sm:pl-12">
+                          <td colSpan={9} className="p-4 pl-8 sm:pl-12">
                             <div className="space-y-2">
                               <div className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex flex-wrap items-center justify-between gap-2">
                                 <span className="flex items-center gap-1.5">
@@ -581,6 +619,132 @@ export const CertificadosView: React.FC<CertificadosViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Quick Rename & Number Modal */}
+      {renamingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
+                  Nombre y Numeración del Certificado
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Distinguí este certificado con un nombre descriptivo o número correlativo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRenamingDoc(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nombre o Distintivo del Certificado
+                </label>
+                <input
+                  type="text"
+                  value={renameNombre}
+                  onChange={(e) => setRenameNombre(e.target.value)}
+                  placeholder={`Certificado N° ${renameNumero || '1'}`}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  autoFocus
+                />
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setRenameNombre(`Certificado N° ${renameNumero || '1'}`)}
+                    className="px-2 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-cyan-300 rounded border border-slate-200 dark:border-slate-700 transition"
+                  >
+                    Certificado N° {renameNumero || '1'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRenameNombre(`Certificado N° ${renameNumero || '1'} - Anticipo`)}
+                    className="px-2 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-cyan-300 rounded border border-slate-200 dark:border-slate-700 transition"
+                  >
+                    + Anticipo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRenameNombre(`Certificado N° ${renameNumero || '1'} - Avance de Obra`)}
+                    className="px-2 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-cyan-300 rounded border border-slate-200 dark:border-slate-700 transition"
+                  >
+                    + Avance de Obra
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRenameNombre(`Certificado Final N° ${renameNumero || '1'}`)}
+                    className="px-2 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-blue-700 dark:text-cyan-300 rounded border border-slate-200 dark:border-slate-700 transition"
+                  >
+                    Certificado Final
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Número de Certificado
+                </label>
+                <input
+                  type="text"
+                  value={renameNumero}
+                  onChange={(e) => {
+                    const newNum = e.target.value;
+                    const oldNum = renameNumero;
+                    setRenameNumero(newNum);
+                    if (
+                      !renameNombre ||
+                      renameNombre === `Certificado N° ${oldNum}` ||
+                      renameNombre === `Certificado ${oldNum}` ||
+                      renameNombre === oldNum
+                    ) {
+                      setRenameNombre(newNum ? `Certificado N° ${newNum}` : '');
+                    }
+                  }}
+                  placeholder="1"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-blue-50/50 dark:bg-blue-950/20 p-2.5 rounded-lg border border-blue-100 dark:border-blue-900/40">
+                💡 <strong>Sin código de certificado:</strong> Cada actividad conserva su propio código técnico (ej. OB-001) y podés asignarle al certificado el nombre o número que desees para identificarlo en la gestión.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setRenamingDoc(null)}
+                className="px-3.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onRenameCertificadoDocumento) {
+                    onRenameCertificadoDocumento(
+                      renamingDoc.grupoKey,
+                      renameNombre.trim() || `Certificado N° ${renameNumero || '1'}`,
+                      renameNumero.trim() || renamingDoc.numero
+                    );
+                  }
+                  setRenamingDoc(null);
+                }}
+                className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-xs transition"
+              >
+                Guardar Cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal

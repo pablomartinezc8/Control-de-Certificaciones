@@ -40,7 +40,7 @@ export const INITIAL_DATA: AppData = {
                 {
                   "id": "id_0pu06aqhwml0",
                   "grupo": "id_w44jzafswml0",
-                  "nombre": "1",
+                  "nombre": "Certificado 1",
                   "numero": "1",
                   "ordenCompra": "",
                   "fechaPresentacion": "2026-06-08",

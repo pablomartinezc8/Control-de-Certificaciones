@@ -76,8 +76,8 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
   const isEditMode = Boolean(initialCertificado || initialDocumento);
 
   // Common Header Form
-  const [nombre, setNombre] = useState('Certificado OC');
-  const [numero, setNumero] = useState('');
+  const [nombre, setNombre] = useState('Certificado N° 1');
+  const [numero, setNumero] = useState('1');
   const [ordenCompra, setOrdenCompra] = useState('');
   const [fechaPresentacion, setFechaPresentacion] = useState('');
   const [fechaAprobacion, setFechaAprobacion] = useState('');
@@ -137,8 +137,14 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
 
     if (targetDoc) {
       setActiveDocKey(targetDoc.grupoKey || targetDoc.id);
-      setNombre(targetDoc.nombre || 'Certificado');
-      setNumero(targetDoc.numero || '1');
+      const docNum = targetDoc.numero || String(targetDoc.item || 1);
+      setNumero(docNum);
+      const curName = targetDoc.nombre?.trim();
+      if (!curName || curName === 'Certificado OC' || curName === docNum) {
+        setNombre(`Certificado N° ${docNum}`);
+      } else {
+        setNombre(curName);
+      }
       setOrdenCompra(targetDoc.ordenCompra || '');
       setFechaPresentacion(normalizeDate(targetDoc.fechaPresentacion) || '');
       setFechaAprobacion(normalizeDate(targetDoc.fechaAprobacion) || '');
@@ -214,8 +220,14 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       // Fallback single certificate not in a group
       const c = initialCertificado.certificado;
       setActiveDocKey('');
-      setNombre(c.nombre || 'Certificado');
-      setNumero(c.numero || '1');
+      const certNum = c.numero?.trim() || '1';
+      setNumero(certNum);
+      const curName = c.nombre?.trim();
+      if (!curName || curName === 'Certificado OC' || curName === certNum) {
+        setNombre(`Certificado N° ${certNum}`);
+      } else {
+        setNombre(curName);
+      }
       setOrdenCompra(c.ordenCompra || '');
       setFechaPresentacion(normalizeDate(c.fechaPresentacion) || '');
       setFechaAprobacion(normalizeDate(c.fechaAprobacion) || '');
@@ -261,13 +273,8 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       // New Multi-Activity Certificate
       setActiveDocKey('');
       const acts: ActividadSeleccionada[] = [];
-      let certCount = 0;
-      proyecto.entregables.forEach((e) => {
-        e.hitos.forEach((h) => {
-          certCount += h.certificados.length;
-        });
-      });
-      const nextCertNum = certCount + 1;
+      const allExistingDocs = getGroupedCertificates(proyecto);
+      const nextCertNum = allExistingDocs.length + 1;
 
       proyecto.entregables.forEach((e) => {
         e.hitos.forEach((h) => {
@@ -301,7 +308,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
         ? proyecto.entregables.find((e) => e.id === defaultHito.entregableId)
         : proyecto.entregables[0];
 
-      setNombre('Certificado OC');
+      setNombre(`Certificado N° ${nextCertNum}`);
       setNumero(String(nextCertNum));
       setOrdenCompra(defaultEnt?.ordenCompra || '');
       setFechaPresentacion(todayStr);
@@ -507,9 +514,11 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       return;
     }
 
+    const cleanNum = numero.trim() || '1';
+    const finalNombre = nombre.trim() || `Certificado N° ${cleanNum}`;
     const baseData = {
-      nombre: nombre.trim() || 'Certificado OC',
-      numero: numero.trim() || '1',
+      nombre: finalNombre,
+      numero: cleanNum,
       ordenCompra: ordenCompra.trim(),
       fechaPresentacion,
       fechaAprobacion,
@@ -617,31 +626,94 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
           {/* Fila 1: Nombre & Número */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block font-medium text-slate-300 mb-1">
-                Nombre
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-semibold text-slate-200">
+                  Nombre o Distintivo del Certificado
+                </label>
+                <span className="text-[10px] text-slate-400">
+                  (Para distinguir e identificarlo)
+                </span>
+              </div>
               <input
                 type="text"
                 required
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
-                placeholder="Certificado OC"
-                className="w-full px-3 py-2 bg-[#080d19] border border-sky-500/60 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-sky-400 transition"
+                placeholder={`Certificado N° ${numero || '1'}`}
+                className="w-full px-3 py-2 bg-[#080d19] border border-sky-500/60 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-sky-400 transition font-medium"
               />
+              {/* Opciones rápidas de numeración o distintivo */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className="text-[10px] text-slate-400">Distintivos rápidos:</span>
+                <button
+                  type="button"
+                  onClick={() => setNombre(`Certificado N° ${numero || '1'}`)}
+                  className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition"
+                  title="Nombrar con número correlativo estándar"
+                >
+                  Certificado N° {numero || '1'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNombre(`Certificado N° ${numero || '1'} - Anticipo`)}
+                  className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition"
+                  title="Distinguir como Anticipo"
+                >
+                  + Anticipo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNombre(`Certificado N° ${numero || '1'} - Avance Obra`)}
+                  className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition"
+                  title="Distinguir como Avance de Obra"
+                >
+                  + Avance Obra
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNombre(`Certificado Final N° ${numero || '1'}`)}
+                  className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition"
+                  title="Distinguir como Certificado Final"
+                >
+                  Certificado Final
+                </button>
+              </div>
             </div>
 
             <div>
-              <label className="block font-medium text-slate-300 mb-1">
-                Número
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-semibold text-slate-200">
+                  Número de Certificado
+                </label>
+                <span className="text-[10px] text-slate-400">
+                  (Orden correlativo)
+                </span>
+              </div>
               <input
                 type="text"
                 required
                 value={numero}
-                onChange={(e) => setNumero(e.target.value)}
-                placeholder=""
-                className="w-full px-3 py-2 bg-[#080d19] border border-slate-800 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-sky-500 transition"
+                onChange={(e) => {
+                  const newNum = e.target.value;
+                  const oldNum = numero;
+                  setNumero(newNum);
+                  // Si el nombre sigue el patrón estándar o estaba vacío, actualizarlo en sincronía
+                  if (
+                    !nombre ||
+                    nombre === `Certificado N° ${oldNum}` ||
+                    nombre === `Certificado ${oldNum}` ||
+                    nombre === 'Certificado OC' ||
+                    nombre === oldNum
+                  ) {
+                    setNombre(newNum ? `Certificado N° ${newNum}` : '');
+                  }
+                }}
+                placeholder="1"
+                className="w-full px-3 py-2 bg-[#080d19] border border-slate-800 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-sky-500 transition font-mono font-bold"
               />
+              <p className="text-[10px] text-slate-400 mt-1.5 leading-tight">
+                No se requiere código de certificado: cada actividad conserva su propio código técnico y podés nombrar o numerar este documento libremente para distinguirlo.
+              </p>
             </div>
           </div>
 

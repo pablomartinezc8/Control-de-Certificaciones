@@ -1043,14 +1043,20 @@ export function getGroupedCertificates(proyecto: Proyecto | undefined): Certific
     const gastosGenerales = Math.round(storedGG * 100) / 100;
     const importeTotal = Math.round((importeActividades + gastosGenerales) * 100) / 100;
 
+    const finalNum = doc.numero?.trim() || String(idx + 1);
+    let finalNombre = doc.nombre?.trim();
+    if (!finalNombre || finalNombre === 'Certificado OC' || finalNombre === finalNum) {
+      finalNombre = `Certificado N° ${finalNum}`;
+    }
+
     return {
       id: doc.grupoKey,
       grupoKey: doc.grupoKey,
       item: idx + 1,
       codigoPrincipal,
       otrosCodigosCount,
-      nombre: doc.nombre,
-      numero: doc.numero,
+      nombre: finalNombre,
+      numero: finalNum,
       ordenCompra: doc.ordenCompra,
       fechaPresentacion: doc.fechaPresentacion,
       fechaAprobacion: doc.fechaAprobacion,

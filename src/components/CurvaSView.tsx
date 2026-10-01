@@ -25,7 +25,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Layers,
-  Sparkles
+  Sparkles,
+  Tag
 } from 'lucide-react';
 import { exportElementToPng } from '../utils/imageExport';
 
@@ -45,6 +46,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
   hideCutoffSelector = false,
 }) => {
   const [viewMode, setViewMode] = useState<'porcentaje' | 'monto'>('porcentaje');
+  const [showLabels, setShowLabels] = useState(true);
   const [downloadingImage, setDownloadingImage] = useState(false);
   const cardToExportRef = useRef<HTMLDivElement>(null);
 
@@ -237,6 +239,101 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
     );
   };
 
+  // Posicionamiento dinámico anti-superposición de etiquetas en la Curva S
+  const renderCustomPlanLabel = (props: any) => {
+    if (!showLabels) return null;
+    const { x, y, value, index } = props;
+    if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return null;
+
+    const pt = puntosCurva[index];
+    const planVal = viewMode === 'porcentaje' ? pt?.porcentajePlanAcumulado : pt?.planificadoAcumulado;
+    const realVal = viewMode === 'porcentaje' ? pt?.porcentajeCertAcumulado : pt?.certificadoAcumulado;
+
+    const formattedText = viewMode === 'porcentaje' 
+      ? `${Math.round(value)}%` 
+      : `$${(value / 1000).toFixed(0)}k`;
+
+    // Posicionamiento dinámico anti-superposición:
+    // Si no hay valor Real en este punto (posteriores al corte), Planificado va arriba (y - 12)
+    // Si existen ambos:
+    //   - Si Planificado >= Real: Planificado es superior o igual, va ARRIBA (y - 12)
+    //   - Si Real > Planificado: Real es superior, por lo que Planificado va ABAJO (y + 16)
+    let yPos = y - 12;
+    if (realVal !== null && realVal !== undefined && typeof planVal === 'number' && typeof realVal === 'number') {
+      if (planVal >= realVal) {
+        yPos = y - 12;
+      } else {
+        yPos = y + 16;
+      }
+    }
+
+    if (yPos < 14) yPos = 14;
+
+    return (
+      <text
+        x={x}
+        y={yPos}
+        textAnchor="middle"
+        fontSize="10"
+        fontWeight="700"
+        fill="#1E40AF"
+        stroke="#FFFFFF"
+        strokeWidth={3.5}
+        strokeLinejoin="round"
+        paintOrder="stroke fill"
+      >
+        {formattedText}
+      </text>
+    );
+  };
+
+  const renderCustomRealLabel = (props: any) => {
+    if (!showLabels) return null;
+    const { x, y, value, index } = props;
+    if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return null;
+
+    const pt = puntosCurva[index];
+    const planVal = viewMode === 'porcentaje' ? pt?.porcentajePlanAcumulado : pt?.planificadoAcumulado;
+    const realVal = viewMode === 'porcentaje' ? pt?.porcentajeCertAcumulado : pt?.certificadoAcumulado;
+
+    if (realVal === null || realVal === undefined) return null;
+
+    const formattedText = viewMode === 'porcentaje' 
+      ? `${Math.round(value)}%` 
+      : `$${(value / 1000).toFixed(0)}k`;
+
+    // Posicionamiento dinámico anti-superposición:
+    //   - Si Real > Planificado: Real es superior, va ARRIBA (y - 12)
+    //   - Si Planificado >= Real: Planificado es superior o igual, Real va ABAJO (y + 16)
+    let yPos = y + 16;
+    if (typeof planVal === 'number' && typeof realVal === 'number') {
+      if (realVal > planVal) {
+        yPos = y - 12;
+      } else {
+        yPos = y + 16;
+      }
+    }
+
+    if (yPos < 14) yPos = 14;
+
+    return (
+      <text
+        x={x}
+        y={yPos}
+        textAnchor="middle"
+        fontSize="10"
+        fontWeight="800"
+        fill="#047857"
+        stroke="#FFFFFF"
+        strokeWidth={3.5}
+        strokeLinejoin="round"
+        paintOrder="stroke fill"
+      >
+        {formattedText}
+      </text>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Tarjeta exportable completa con encabezado, selectores y gráfico */}
@@ -337,6 +434,21 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                 </button>
               </div>
 
+              {/* Control de visibilidad de etiquetas % */}
+              <button
+                type="button"
+                onClick={() => setShowLabels(!showLabels)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                  showLabels
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                }`}
+                title={showLabels ? "Ocultar etiquetas de % sobre las curvas" : "Mostrar etiquetas de % sobre las curvas"}
+              >
+                <Tag className="w-3 h-3" />
+                <span>{showLabels ? 'Ocultar %' : 'Ver %'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={downloadCurvaImage}
@@ -429,7 +541,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={puntosCurva}
-                margin={{ top: 25, right: 30, left: 10, bottom: 25 }}
+                margin={{ top: 32, right: 30, left: 10, bottom: 25 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
                 <XAxis
@@ -464,16 +576,12 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                   strokeWidth={2.5}
                   dot={{ r: 3.5, fill: '#2563EB', stroke: '#FFFFFF', strokeWidth: 1.5 }}
                 >
-                  <LabelList
-                    dataKey={viewMode === 'porcentaje' ? 'porcentajePlanAcumulado' : 'planificadoAcumulado'}
-                    position="top"
-                    offset={8}
-                    formatter={(val: any) => {
-                      if (typeof val !== 'number') return '';
-                      return viewMode === 'porcentaje' ? `${val.toFixed(0)}%` : `$${(val / 1000).toFixed(0)}k`;
-                    }}
-                    style={{ fontSize: '10px', fill: '#1E40AF', fontWeight: 700 }}
-                  />
+                  {showLabels && (
+                    <LabelList
+                      dataKey={viewMode === 'porcentaje' ? 'porcentajePlanAcumulado' : 'planificadoAcumulado'}
+                      content={renderCustomPlanLabel}
+                    />
+                  )}
                 </Area>
 
                 {/* Línea Real Certificado: Verde Esmeralda (#10B981) ALTO CONTRASTE que CORTA en la fecha seleccionada */}
@@ -486,16 +594,12 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                   strokeWidth={3}
                   dot={{ r: 4.5, fill: '#10B981', stroke: '#FFFFFF', strokeWidth: 2 }}
                 >
-                  <LabelList
-                    dataKey={viewMode === 'porcentaje' ? 'porcentajeCertAcumulado' : 'certificadoAcumulado'}
-                    position="bottom"
-                    offset={8}
-                    formatter={(val: any) => {
-                      if (typeof val !== 'number') return '';
-                      return viewMode === 'porcentaje' ? `${val.toFixed(0)}%` : `$${(val / 1000).toFixed(0)}k`;
-                    }}
-                    style={{ fontSize: '10px', fill: '#047857', fontWeight: 800 }}
-                  />
+                  {showLabels && (
+                    <LabelList
+                      dataKey={viewMode === 'porcentaje' ? 'porcentajeCertAcumulado' : 'certificadoAcumulado'}
+                      content={renderCustomRealLabel}
+                    />
+                  )}
                 </Line>
 
                 {/* Línea Facturado: Púrpura punteado que también corta en la fecha seleccionada */}
