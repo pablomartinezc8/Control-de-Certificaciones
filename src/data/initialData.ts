@@ -46,7 +46,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "2026-06-08",
                   "fechaAprobacion": "2026-06-08",
                   "fechaCobro": "2026-06-08",
-                  "importe": 6623.818181818182,
+                  "importe": 5184,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -143,7 +143,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "0026-06-26",
                   "fechaAprobacion": "2026-06-26",
                   "fechaCobro": "2026-06-26",
-                  "importe": 4589.890909090909,
+                  "importe": 3726,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -166,7 +166,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "2026-07-10",
                   "fechaAprobacion": "2026-07-10",
                   "fechaCobro": "2026-07-10",
-                  "importe": 2294.9454545454546,
+                  "importe": 1863,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -221,7 +221,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "0026-06-26",
                   "fechaAprobacion": "2026-06-26",
                   "fechaCobro": "2026-06-26",
-                  "importe": 4557.490909090909,
+                  "importe": 3693.6,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -244,7 +244,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "2026-07-10",
                   "fechaAprobacion": "2026-07-10",
                   "fechaCobro": "2026-07-10",
-                  "importe": 2278.7454545454543,
+                  "importe": 1846.8,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -299,7 +299,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "2026-07-10",
                   "fechaAprobacion": "2026-07-10",
                   "fechaCobro": "2026-07-10",
-                  "importe": 14399.818181818182,
+                  "importe": 12960,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -635,7 +635,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "2026-09-02",
                   "fechaAprobacion": "2026-09-02",
                   "fechaCobro": "2026-09-02",
-                  "importe": 7181.890909090909,
+                  "importe": 5742,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -1610,7 +1610,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "2026-09-02",
                   "fechaAprobacion": "2026-09-02",
                   "fechaCobro": "2026-09-02",
-                  "importe": 9749.818181818182,
+                  "importe": 8310,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""
@@ -1657,7 +1657,7 @@ export const INITIAL_DATA: AppData = {
                   "fechaPresentacion": "2026-08-07",
                   "fechaAprobacion": "2026-08-07",
                   "fechaCobro": "2026-08-07",
-                  "importe": 16019.818181818182,
+                  "importe": 14580,
                   "tipo": "normal",
                   "estado": "Cobrado",
                   "observaciones": ""

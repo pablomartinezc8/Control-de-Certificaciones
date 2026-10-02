@@ -46,7 +46,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
   hideCutoffSelector = false,
 }) => {
   const [viewMode, setViewMode] = useState<'porcentaje' | 'monto'>('porcentaje');
-  const [showLabels, setShowLabels] = useState(true);
+  const [labelMode, setLabelMode] = useState<'clave' | 'todos' | 'ninguno'>('clave');
   const [downloadingImage, setDownloadingImage] = useState(false);
   const cardToExportRef = useRef<HTMLDivElement>(null);
 
@@ -239,62 +239,145 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
     );
   };
 
+  // Cálculo de índices elegibles para evitar superposición horizontal y vertical de etiquetas
+  const labeledIndices = useMemo(() => {
+    if (labelMode === 'ninguno') return new Set<number>();
+    const total = puntosCurva.length;
+    if (total === 0) return new Set<number>();
+
+    if (labelMode === 'todos') {
+      return new Set(puntosCurva.map((_, i) => i));
+    }
+
+    // Modo 'clave': Algoritmo inteligente anti-superposición
+    const selected = new Set<number>();
+    
+    // 1. Siempre incluir el punto 0 (inicio de la obra: 0%)
+    selected.add(0);
+
+    // 2. Siempre incluir la fecha de corte seleccionada / activa (control prioritario)
+    const cutoffIdx = puntosCurva.findIndex((p) => p.fecha === activeCutoffDate);
+    if (cutoffIdx >= 0) {
+      selected.add(cutoffIdx);
+    }
+
+    // 3. Siempre incluir el punto final (cierre contractual: 100%)
+    if (total > 1) {
+      selected.add(total - 1);
+    }
+
+    // 4. Distribuir puntos intermedios con separación mínima adecuada según la densidad de fechas
+    // Si hay muchas fechas (ej. > 14), se requiere al menos 3 pasos de distancia entre etiquetas consecutivas
+    const minStep = total >= 16 ? 3 : total >= 8 ? 2 : 1;
+    let lastLabeledIdx = 0;
+
+    for (let i = 1; i < total - 1; i++) {
+      if (selected.has(i)) {
+        lastLabeledIdx = i;
+        continue;
+      }
+
+      // Evitar colocar una etiqueta pegada inmediatamente antes o después del corte activo
+      if (cutoffIdx >= 0 && Math.abs(i - cutoffIdx) < minStep) {
+        continue;
+      }
+
+      // Evitar colocar una etiqueta pegada al punto final
+      if (Math.abs(i - (total - 1)) < minStep) {
+        continue;
+      }
+
+      // Si ha transcurrido la distancia mínima requerida
+      if (i - lastLabeledIdx >= minStep) {
+        const curPt = puntosCurva[i];
+        const prevPt = puntosCurva[lastLabeledIdx];
+        const deltaPlan = Math.abs((curPt?.porcentajePlanAcumulado || 0) - (prevPt?.porcentajePlanAcumulado || 0));
+
+        // Solo incluir si hay un cambio apreciable de porcentaje (>= 3%) o si la distancia ya es amplia
+        if (deltaPlan >= 3 || i - lastLabeledIdx >= minStep * 2) {
+          selected.add(i);
+          lastLabeledIdx = i;
+        }
+      }
+    }
+
+    return selected;
+  }, [puntosCurva, labelMode, activeCutoffDate]);
+
   // Posicionamiento dinámico anti-superposición de etiquetas en la Curva S
   const renderCustomPlanLabel = (props: any) => {
-    if (!showLabels) return null;
+    if (labelMode === 'ninguno') return null;
     const { x, y, value, index } = props;
     if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return null;
+
+    if (!labeledIndices.has(index)) return null;
 
     const pt = puntosCurva[index];
     const planVal = viewMode === 'porcentaje' ? pt?.porcentajePlanAcumulado : pt?.planificadoAcumulado;
     const realVal = viewMode === 'porcentaje' ? pt?.porcentajeCertAcumulado : pt?.certificadoAcumulado;
+    const isCutoff = pt?.fecha === activeCutoffDate;
 
     const formattedText = viewMode === 'porcentaje' 
       ? `${Math.round(value)}%` 
       : `$${(value / 1000).toFixed(0)}k`;
 
     // Posicionamiento dinámico anti-superposición:
-    // Si no hay valor Real en este punto (posteriores al corte), Planificado va arriba (y - 12)
+    // Si no hay valor Real en este punto (posteriores al corte), Planificado va arriba (y - 13)
     // Si existen ambos:
-    //   - Si Planificado >= Real: Planificado es superior o igual, va ARRIBA (y - 12)
-    //   - Si Real > Planificado: Real es superior, por lo que Planificado va ABAJO (y + 16)
-    let yPos = y - 12;
+    //   - Si Planificado >= Real: Planificado va ARRIBA (y - 14)
+    //   - Si Real > Planificado: Planificado va ABAJO (y + 17)
+    let yPos = y - 13;
     if (realVal !== null && realVal !== undefined && typeof planVal === 'number' && typeof realVal === 'number') {
       if (planVal >= realVal) {
-        yPos = y - 12;
+        yPos = y - 14;
       } else {
-        yPos = y + 16;
+        yPos = y + 17;
       }
     }
 
     if (yPos < 14) yPos = 14;
 
+    const boxWidth = formattedText.length > 3 ? 34 : 28;
+
     return (
-      <text
-        x={x}
-        y={yPos}
-        textAnchor="middle"
-        fontSize="10"
-        fontWeight="700"
-        fill="#1E40AF"
-        stroke="#FFFFFF"
-        strokeWidth={3.5}
-        strokeLinejoin="round"
-        paintOrder="stroke fill"
-      >
-        {formattedText}
-      </text>
+      <g>
+        {/* Pastilla de fondo nítido para que no se superponga con la línea o cuadrícula */}
+        <rect
+          x={x - boxWidth / 2}
+          y={yPos - 9.5}
+          width={boxWidth}
+          height={14}
+          rx={4}
+          fill={isCutoff ? '#EFF6FF' : '#FFFFFF'}
+          stroke={isCutoff ? '#2563EB' : '#93C5FD'}
+          strokeWidth={isCutoff ? 1.5 : 1}
+          opacity={0.96}
+        />
+        <text
+          x={x}
+          y={yPos + 1}
+          textAnchor="middle"
+          fontSize="9.5"
+          fontWeight="700"
+          fill="#1D4ED8"
+        >
+          {formattedText}
+        </text>
+      </g>
     );
   };
 
   const renderCustomRealLabel = (props: any) => {
-    if (!showLabels) return null;
+    if (labelMode === 'ninguno') return null;
     const { x, y, value, index } = props;
     if (value === null || value === undefined || typeof value !== 'number' || isNaN(value)) return null;
+
+    if (!labeledIndices.has(index)) return null;
 
     const pt = puntosCurva[index];
     const planVal = viewMode === 'porcentaje' ? pt?.porcentajePlanAcumulado : pt?.planificadoAcumulado;
     const realVal = viewMode === 'porcentaje' ? pt?.porcentajeCertAcumulado : pt?.certificadoAcumulado;
+    const isCutoff = pt?.fecha === activeCutoffDate;
 
     if (realVal === null || realVal === undefined) return null;
 
@@ -303,34 +386,46 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
       : `$${(value / 1000).toFixed(0)}k`;
 
     // Posicionamiento dinámico anti-superposición:
-    //   - Si Real > Planificado: Real es superior, va ARRIBA (y - 12)
-    //   - Si Planificado >= Real: Planificado es superior o igual, Real va ABAJO (y + 16)
-    let yPos = y + 16;
+    //   - Si Real > Planificado: Real va ARRIBA (y - 14)
+    //   - Si Planificado >= Real: Real va ABAJO (y + 17)
+    let yPos = y + 17;
     if (typeof planVal === 'number' && typeof realVal === 'number') {
       if (realVal > planVal) {
-        yPos = y - 12;
+        yPos = y - 14;
       } else {
-        yPos = y + 16;
+        yPos = y + 17;
       }
     }
 
     if (yPos < 14) yPos = 14;
 
+    const boxWidth = formattedText.length > 3 ? 34 : 28;
+
     return (
-      <text
-        x={x}
-        y={yPos}
-        textAnchor="middle"
-        fontSize="10"
-        fontWeight="800"
-        fill="#047857"
-        stroke="#FFFFFF"
-        strokeWidth={3.5}
-        strokeLinejoin="round"
-        paintOrder="stroke fill"
-      >
-        {formattedText}
-      </text>
+      <g>
+        {/* Pastilla de fondo esmeralda / blanco nítido con borde verde para Real */}
+        <rect
+          x={x - boxWidth / 2}
+          y={yPos - 9.5}
+          width={boxWidth}
+          height={14}
+          rx={4}
+          fill={isCutoff ? '#ECFDF5' : '#FFFFFF'}
+          stroke={isCutoff ? '#059669' : '#6EE7B7'}
+          strokeWidth={isCutoff ? 1.5 : 1}
+          opacity={0.96}
+        />
+        <text
+          x={x}
+          y={yPos + 1}
+          textAnchor="middle"
+          fontSize="9.5"
+          fontWeight="800"
+          fill="#047857"
+        >
+          {formattedText}
+        </text>
+      </g>
     );
   };
 
@@ -434,20 +529,47 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                 </button>
               </div>
 
-              {/* Control de visibilidad de etiquetas % */}
-              <button
-                type="button"
-                onClick={() => setShowLabels(!showLabels)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                  showLabels
-                    ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                }`}
-                title={showLabels ? "Ocultar etiquetas de % sobre las curvas" : "Mostrar etiquetas de % sobre las curvas"}
-              >
-                <Tag className="w-3 h-3" />
-                <span>{showLabels ? 'Ocultar %' : 'Ver %'}</span>
-              </button>
+              {/* Control de visibilidad de etiquetas anti-superposición */}
+              <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 text-xs font-medium">
+                <button
+                  type="button"
+                  onClick={() => setLabelMode('clave')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
+                    labelMode === 'clave'
+                      ? 'bg-blue-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Etiquetas clave optimizadas sin superposiciones (Inicio, Corte Activo, Fin e Hitos principales)"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>% Clave</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLabelMode('todos')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
+                    labelMode === 'todos'
+                      ? 'bg-blue-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Mostrar etiquetas en todas las fechas de corte"
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>Todos</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLabelMode('ninguno')}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors ${
+                    labelMode === 'ninguno'
+                      ? 'bg-blue-600 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Ocultar etiquetas de % (vista limpia)"
+                >
+                  <span>Sin %</span>
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -576,7 +698,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                   strokeWidth={2.5}
                   dot={{ r: 3.5, fill: '#2563EB', stroke: '#FFFFFF', strokeWidth: 1.5 }}
                 >
-                  {showLabels && (
+                  {labelMode !== 'ninguno' && (
                     <LabelList
                       dataKey={viewMode === 'porcentaje' ? 'porcentajePlanAcumulado' : 'planificadoAcumulado'}
                       content={renderCustomPlanLabel}
@@ -594,7 +716,7 @@ export const CurvaSView: React.FC<CurvaSViewProps> = ({
                   strokeWidth={3}
                   dot={{ r: 4.5, fill: '#10B981', stroke: '#FFFFFF', strokeWidth: 2 }}
                 >
-                  {showLabels && (
+                  {labelMode !== 'ninguno' && (
                     <LabelList
                       dataKey={viewMode === 'porcentaje' ? 'porcentajeCertAcumulado' : 'certificadoAcumulado'}
                       content={renderCustomRealLabel}

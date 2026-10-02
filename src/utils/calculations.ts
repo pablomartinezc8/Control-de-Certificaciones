@@ -1140,32 +1140,9 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
   let totalGastosCertificados = 0;
 
   const certificados: GastosCertificadoBreakdown[] = docs.map((doc) => {
-    let docGastos = 0;
-    let docBase = 0;
-
-    const hasExplicitGG = Boolean(
-      (proyecto.certificadosGastos && Object.keys(proyecto.certificadosGastos).length > 0) ||
-      docs.some((d) => d.gastosGenerales > 0)
-    );
-
-    if (hasExplicitGG) {
-      docGastos = doc.gastosGenerales || 0;
-      docBase = doc.importeActividades;
-    } else {
-      doc.actividades.forEach((act) => {
-        const ent = proyecto.entregables.find((e) => e.id === act.entregableId);
-        if (!ent) return;
-        const baseEnt = Number(ent.valorTotal) || 0;
-        const gastoEnt = ent.esCHO ? 0 : getGastoPorEntregable(proyecto);
-        const totalEnt = baseEnt + gastoEnt;
-        const ratioGasto = totalEnt > 0 ? gastoEnt / totalEnt : 0;
-        const ratioBase = totalEnt > 0 ? baseEnt / totalEnt : 0;
-
-        const imp = Number(act.importe ?? act.cobrado ?? act.pendiente) || 0;
-        docGastos += imp * ratioGasto;
-        docBase += imp * ratioBase;
-      });
-    }
+    // Los gastos generales se imputan directamente a nivel del certificado, NUNCA a las actividades
+    const docGastos = doc.gastosGenerales || 0;
+    const docBase = doc.importeActividades;
 
     if (doc.estado === 'Cobrado' || doc.estado === 'Facturado') {
       totalGastosCobrados += docGastos;
@@ -1187,35 +1164,31 @@ export function computeGastosTracking(proyecto: Proyecto | undefined): GastosTra
 
   const entregables: GastosEntregableBreakdown[] = proyecto.entregables.map((ent) => {
     const baseEnt = Number(ent.valorTotal) || 0;
-    const gastoAsignado = ent.esCHO ? 0 : getGastoPorEntregable(proyecto);
-    const totalEfectivo = baseEnt + gastoAsignado;
-    const ratioGasto = totalEfectivo > 0 ? gastoAsignado / totalEfectivo : 0;
-
-    let gastoCobrado = 0;
-    let gastoCertificado = 0;
+    let baseCobrado = 0;
+    let baseCertificado = 0;
 
     ent.hitos.forEach((h) => {
       h.certificados.forEach((c) => {
         const imp = Number(c.importe) || 0;
-        gastoCertificado += imp * ratioGasto;
+        baseCertificado += imp;
         if (c.estado === 'Cobrado' || c.estado === 'Facturado') {
-          gastoCobrado += imp * ratioGasto;
+          baseCobrado += imp;
         }
       });
     });
 
-    const gastoRestante = Math.max(0, gastoAsignado - gastoCobrado);
-    const porcentajeCobrado = gastoAsignado > 0 ? (gastoCobrado / gastoAsignado) * 100 : 0;
+    const baseRestante = Math.max(0, baseEnt - baseCobrado);
+    const porcentajeCobrado = baseEnt > 0 ? (baseCobrado / baseEnt) * 100 : 0;
 
     return {
       id: ent.id,
       codigo: ent.codigo,
       descripcion: ent.descripcion,
       esCHO: Boolean(ent.esCHO),
-      gastoAsignado: Math.round(gastoAsignado * 100) / 100,
-      gastoCobrado: Math.round(gastoCobrado * 100) / 100,
-      gastoCertificado: Math.round(gastoCertificado * 100) / 100,
-      gastoRestante: Math.round(gastoRestante * 100) / 100,
+      gastoAsignado: Math.round(baseEnt * 100) / 100,
+      gastoCobrado: Math.round(baseCobrado * 100) / 100,
+      gastoCertificado: Math.round(baseCertificado * 100) / 100,
+      gastoRestante: Math.round(baseRestante * 100) / 100,
       porcentajeCobrado: Math.round(porcentajeCobrado * 10) / 10,
     };
   });

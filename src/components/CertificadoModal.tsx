@@ -296,7 +296,7 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
             esVencido: dateInfo.esVencido,
             valorHito,
             pendiente,
-            importeACobrar: pendiente,
+            importeACobrar: isDefault ? (pendiente > 0 ? pendiente : valorHito) : (pendiente > 0 ? pendiente : valorHito),
             seleccionado: Boolean(isDefault),
           });
         });
@@ -327,13 +327,14 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       prev.map((act) => {
         if (act.entregableId === entregableId && act.hitoId === hitoId) {
           const nuevoSeleccionado = !act.seleccionado;
+          const pureVal = act.pendiente > 0 ? act.pendiente : act.valorHito;
           return {
             ...act,
             seleccionado: nuevoSeleccionado,
             importeACobrar: nuevoSeleccionado
-              ? act.importeACobrar > 0
+              ? act.importeACobrar > 0 && act.importeACobrar <= act.valorHito
                 ? act.importeACobrar
-                : act.pendiente
+                : pureVal
               : act.importeACobrar,
           };
         }
@@ -364,13 +365,14 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
       prev.map((act) => {
         const key = `${act.entregableId}__${act.hitoId}`;
         if (targetKeys.has(key)) {
+          const pureVal = act.pendiente > 0 ? act.pendiente : act.valorHito;
           return {
             ...act,
             seleccionado: select,
             importeACobrar: select
-              ? act.importeACobrar > 0
+              ? act.importeACobrar > 0 && act.importeACobrar <= act.valorHito
                 ? act.importeACobrar
-                : act.pendiente
+                : pureVal
               : act.importeACobrar,
           };
         }
@@ -384,10 +386,11 @@ export const CertificadoModal: React.FC<CertificadoModalProps> = ({
     setActividades((prev) =>
       prev.map((act) => {
         if (act.esVencido && act.pendiente > 0.01) {
+          const pureVal = act.pendiente > 0 ? act.pendiente : act.valorHito;
           return {
             ...act,
             seleccionado: true,
-            importeACobrar: act.importeACobrar > 0 ? act.importeACobrar : act.pendiente,
+            importeACobrar: act.importeACobrar > 0 && act.importeACobrar <= act.valorHito ? act.importeACobrar : pureVal,
           };
         }
         return act;

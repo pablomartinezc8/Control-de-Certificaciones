@@ -196,7 +196,7 @@ export const GastosView: React.FC<GastosViewProps> = ({ proyecto, onUpdateGastos
           </div>
           <div className="mt-1 text-[11px] text-slate-500 flex items-center justify-between">
             <span>{gastosActuales.length} ítem{gastosActuales.length === 1 ? '' : 's'} sumado{gastosActuales.length === 1 ? '' : 's'}</span>
-            <span className="font-medium text-slate-600">${cuotaPorEntregable.toFixed(2)}/ítem</span>
+            <span className="font-medium text-purple-600">Presupuesto global</span>
           </div>
           <div className="mt-3 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
             <div className="bg-purple-600 h-full rounded-full w-full" />
@@ -283,9 +283,9 @@ export const GastosView: React.FC<GastosViewProps> = ({ proyecto, onUpdateGastos
       <div className="bg-blue-50/60 border border-blue-200/60 rounded-xl p-4 flex items-start gap-3 text-xs text-blue-900">
         <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
         <div>
-          <div className="font-bold">Metodología de Generales del Proyecto en Base44</div>
+          <div className="font-bold">Facturación de Gastos Generales en Certificados</div>
           <p className="mt-0.5 text-blue-800 leading-relaxed">
-            Los generales del proyecto (${formatCurrency(totalGastosGenerales)}) se componen de la suma de sus ítems (gerenciamiento, utilidades, gastos administrativos, etc.) y se distribuyen entre los entregables (${formatCurrency(cuotaPorEntregable)} por ítem). A medida que se emiten y cobran las certificaciones de cada hito, se certifica en forma proporcional tanto la base técnica como la cuota de generales del proyecto asignada.
+            Los gastos generales del proyecto (${formatCurrency(totalGastosGenerales)}) se agregan y facturan directamente como un ítem propio en el certificado (sin sumarse ni alterar el valor de las actividades técnicas). Al seleccionar una actividad para certificar, esta toma únicamente su valor contractual correspondiente.
           </p>
         </div>
       </div>
@@ -678,9 +678,9 @@ export const GastosView: React.FC<GastosViewProps> = ({ proyecto, onUpdateGastos
                     <tr>
                       <th className="px-4 py-3">Código</th>
                       <th className="px-4 py-3">Descripción</th>
-                      <th className="px-4 py-3 text-right">Generales Asignados</th>
-                      <th className="px-4 py-3 text-right text-emerald-700 bg-emerald-50/40">Generales Facturados</th>
-                      <th className="px-4 py-3 text-right text-blue-700">Generales Restantes</th>
+                      <th className="px-4 py-3 text-right">Monto Contractual</th>
+                      <th className="px-4 py-3 text-right text-emerald-700 bg-emerald-50/40">Base Facturada</th>
+                      <th className="px-4 py-3 text-right text-blue-700">Saldo Restante</th>
                       <th className="px-4 py-3 text-center">% Facturado</th>
                       <th className="px-4 py-3">Avance</th>
                     </tr>
